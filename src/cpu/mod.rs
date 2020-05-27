@@ -4,6 +4,7 @@ use crate::cartridge::Cartridge;
 use crate::ppu::PPU;
 use register::{Flag, Registers};
 use std::io::Write;
+use std::sync::{Arc, RwLock};
 
 const NMI_VECTOR: u16 = 0xfffa;
 const RESET_VECTOR: u16 = 0xfffc;
@@ -156,18 +157,18 @@ impl AddressingMode {
     }
 }
 
-pub struct CPU<'a> {
+pub struct CPU {
     reg: Registers,
     ram: [u8; 0x0800],
     ppu: PPU,
     apu: [u8; 0x0018],
-    cartridge: &'a Cartridge,
+    cartridge: Arc<RwLock<Cartridge>>,
     logger: std::fs::File,
     instruction_count: usize,
 }
 
-impl<'a> CPU<'a> {
-    pub fn new(cartridge: &'a Cartridge) -> Self {
+impl CPU {
+    pub fn new(cartridge: Arc<RwLock<Cartridge>>) -> Self {
         let file = std::fs::File::create("log.txt").unwrap();
         let mut cpu = CPU {
             reg: Registers::default(),
@@ -407,7 +408,7 @@ impl<'a> CPU<'a> {
             0x2000..=0x3FFF => self.ppu.read(addr as usize),
             0x4000..=0x4017 => self.apu[addr as usize % 0x0018],
             0x4018..=0x401F => unimplemented!(),
-            0x4020..=0xFFFF => self.cartridge.read(addr),
+            0x4020..=0xFFFF => self.cartridge.read().unwrap().read(addr),
         }
     }
 
@@ -431,7 +432,7 @@ impl<'a> CPU<'a> {
             0x6004..=0x7FFF => {
                 print!("{}", val as char);
             }
-            n @ 0x4020..=0xFFFF => panic!("cannot write to read only memory {:X}", n),
+            0x4020..=0xFFFF => self.cartridge.write().unwrap().write(addr, val),
         }
     }
 
@@ -450,7 +451,7 @@ impl<'a> CPU<'a> {
 
 /// CPU opcodes
 /// implemented as documented in https://www.masswerk.at/6502/6502_instruction_set.html
-impl<'a> CPU<'a> {
+impl CPU {
     /// ADC  Add Memory to Accumulator with Carry
     ///  A + M + C -> A, C                N Z C I D V
     ///                                   + + + - - +

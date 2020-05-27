@@ -1,7 +1,9 @@
-mod nrom_000;
+mod mapper_000;
+mod mapper_001;
 
 pub trait Mapper {
     fn readb(&self, addr: u16) -> u8;
+    fn writeb(&mut self, addr: u16, val: u8);
 
     fn readw(&self, addr: u16) -> u16 {
         let lo = self.readb(addr) as u16;
@@ -26,14 +28,15 @@ fn read_header(data: [u8; 16]) -> Header {
     }
 }
 
-pub fn from(data: Vec<u8>) -> impl Mapper {
+pub fn from(data: Vec<u8>) -> Box<dyn Mapper> {
     // let header_data = &data[0..=15];
     let (header_data, data) = data.split_at(16);
     let mut header: [u8; 16] = [0; 16];
     header.copy_from_slice(&header_data[0..=15]);
     let header = read_header(header);
     match header.mapper {
-        0x00 => nrom_000::Mapper::new(header, data.to_vec()),
+        0x00 => Box::new(mapper_000::Mapper::new(header, data.to_vec())),
+        0x01 => Box::new(mapper_001::Mapper::new(header, data.to_vec())),
         n => panic!("unimeplemented mapper {}", n),
     }
 }

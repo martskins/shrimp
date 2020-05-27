@@ -1,5 +1,6 @@
 use super::Header;
 
+// NROM mapper implementation
 pub struct Mapper {
     header: Header,
     prg_rom: Vec<u8>,
@@ -30,10 +31,11 @@ impl super::Mapper for Mapper {
                 } else {
                     addr & 0x3FFF
                 };
-                let res = self.prg_rom[addr as usize];
-                res
+                self.prg_rom[addr as usize]
             }
             _ => 0,
         }
     }
+
+    fn writeb(&mut self, addr: u16, val: u8) {}
 }

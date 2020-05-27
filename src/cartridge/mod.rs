@@ -12,9 +12,12 @@ impl Cartridge {
         self.mapper.readb(addr)
     }
 
+    pub fn write(&mut self, addr: u16, val: u8) {
+        self.mapper.writeb(addr, val)
+    }
+
     pub(crate) fn from_data(data: Vec<u8>) -> Cartridge {
         let mapper = mapper::from(data);
-        let mapper = Box::new(mapper);
         Cartridge { mapper }
     }
 
@@ -24,7 +27,6 @@ impl Cartridge {
         file.read_to_end(&mut data)?;
 
         let mapper = mapper::from(data);
-        let mapper = Box::new(mapper);
         Ok(Cartridge { mapper })
     }
 }
