@@ -1,7 +1,6 @@
 use super::Header;
 
 pub struct Mapper {
-    shift_register: u8,
     header: Header,
     prg_rom_size: usize,
     prg_rom: Vec<u8>,
@@ -11,10 +10,9 @@ pub struct Mapper {
 
 impl Mapper {
     pub fn new(header: Header, data: Vec<u8>) -> Mapper {
-        let prg_rom_size = 0x4000 * header.prg_rom_size;
-        let (prg_rom, chr_rom) = data.split_at(prg_rom_size);
+        let prg_rom_size = header.prg_rom_size as usize;
+        let (prg_rom, chr_rom) = data.split_at(0x4000 * prg_rom_size);
         Mapper {
-            shift_register: 0,
             header,
             prg_rom_size,
             prg_rom: prg_rom.to_vec(),
@@ -30,21 +28,11 @@ impl super::Mapper for Mapper {
             0x4020..=0x5FFF => {
                 print!("{}", val as char);
             }
-            0x6000..=0x6003 => {}
-            0x8000..=0xFFFF => {
-                if val < 0x80 {
-                    let done = self.shift_register & 0x01 == 0x01;
-                    self.shift_register >>= 1;
-                    self.shift_register |= (val & 0x01) << 4;
-                    if done {
-                        self.shift_register = 0x10;
-                    }
-                } else {
-                    self.shift_register = 0x10;
-                }
+            0x6000..=0x7FFF => {
+                print!("{}", val as char);
             }
-            x => {}
-            // x => panic!("write at {:X}", x),
+            0x8000..=0xFFFF => self.selected_bank = (addr & 0x03) as usize,
+            _ => panic!("not implemented"),
         }
     }
 
@@ -60,15 +48,11 @@ impl super::Mapper for Mapper {
                 let addr = addr as usize - 0x8000;
                 self.prg_rom[addr % self.prg_rom_size]
             }
-            _ => unimplemented!("cMMC1 read"),
+            _ => unimplemented!("cnrom read {:X}", addr),
         }
     }
 
     fn chr_at(&self, pos: usize) -> Vec<u8> {
-        if self.chr_rom.is_empty() {
-            return vec![];
-        }
-
         self.chr_rom[pos * 16..(pos + 1) * 16].to_vec()
     }
 }

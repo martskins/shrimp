@@ -14,32 +14,33 @@ impl AddressLatch {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum Reg {
-    PPUCTRL,
-    PPUMASK,
-    PPUSTATUS,
-    OAMADDR,
-    OAMDATA,
-    PPUSCROLL,
-    PPUADDR,
-    PPUDATA,
-    OAMDMA,
+pub enum Register {
+    PPUCTRL,   // 0x2000
+    PPUMASK,   // 0x2001
+    PPUSTATUS, // 0x2002
+    OAMADDR,   // 0x2003
+    OAMDATA,   // 0x2004
+    PPUSCROLL, // 0x2005
+    PPUADDR,   // 0x2006
+    PPUDATA,   // 0x2007
+    OAMDMA,    // 0x2008
 }
 
-impl From<usize> for Reg {
-    fn from(n: usize) -> Reg {
+impl From<usize> for Register {
+    fn from(n: usize) -> Register {
         let n = if n >= 0x2000 { n - 0x2000 } else { n };
 
-        match n % 0x0009 {
-            0 => Reg::PPUCTRL,
-            1 => Reg::PPUMASK,
-            2 => Reg::PPUSTATUS,
-            3 => Reg::OAMADDR,
-            4 => Reg::OAMDATA,
-            5 => Reg::PPUSCROLL,
-            6 => Reg::PPUADDR,
-            7 => Reg::PPUDATA,
-            8 => Reg::OAMDMA,
+        match n & 7 {
+            0 => Register::PPUCTRL,
+            1 => Register::PPUMASK,
+            2 => Register::PPUSTATUS,
+            3 => Register::OAMADDR,
+            4 => Register::OAMDATA,
+            5 => Register::PPUSCROLL,
+            6 => Register::PPUADDR,
+            7 => Register::PPUDATA,
+            // TODO: chech whether this is needed
+            // 8 => Reg::OAMDMA,
             _ => panic!("not a valid PPU reg"),
         }
     }

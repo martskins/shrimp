@@ -16,6 +16,10 @@ impl Cartridge {
         self.mapper.writeb(addr, val)
     }
 
+    pub fn chr_at(&self, pos: usize) -> Vec<u8> {
+        self.mapper.chr_at(pos)
+    }
+
     pub(crate) fn from_data(data: Vec<u8>) -> Cartridge {
         let mapper = mapper::from(data);
         Cartridge { mapper }
