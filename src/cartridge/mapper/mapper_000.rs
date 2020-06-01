@@ -42,11 +42,11 @@ impl super::Mapper for Mapper {
 
     fn writeb(&mut self, addr: u16, val: u8) {}
 
-    fn chr_at(&self, pos: usize) -> Vec<u8> {
+    fn chr_at(&self, pos: usize) -> &[u8] {
         if self.chr_rom.is_empty() {
-            return vec![];
+            return &[];
         }
 
-        self.chr_rom[pos * 16..(pos + 1) * 16].to_vec()
+        &self.chr_rom[pos * 16..(pos + 1) * 16]
     }
 }

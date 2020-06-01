@@ -52,7 +52,7 @@ impl super::Mapper for Mapper {
         }
     }
 
-    fn chr_at(&self, pos: usize) -> Vec<u8> {
-        self.chr_rom[pos * 16..(pos + 1) * 16].to_vec()
+    fn chr_at(&self, pos: usize) -> &[u8] {
+        &self.chr_rom[pos * 16..(pos + 1) * 16]
     }
 }

@@ -1,175 +1,31 @@
+mod addressing_mode;
 mod register;
 
 use crate::cartridge::Cartridge;
+use crate::cpu::addressing_mode::AddressingMode;
 use crate::ppu::PPU;
 use register::{Flag, Registers};
+use std::cell::RefCell;
+#[cfg(feature = "debug")]
 use std::io::Write;
-use std::sync::{Arc, RwLock};
+use std::rc::Rc;
 
 const NMI_VECTOR: u16 = 0xfffa;
 const RESET_VECTOR: u16 = 0xfffc;
 const BRK_VECTOR: u16 = 0xfffe;
 
-#[derive(Debug)]
-enum AddressingMode {
-    Implied,
-    Accumulator,
-    Immediate,
-    Relative,
-    ZeroPage,
-    ZeroPageX,
-    ZeroPageY,
-    Absolute,
-    AbsoluteX,
-    AbsoluteY,
-    Indirect,
-    IndirectX,
-    IndirectY,
-}
-
-impl AddressingMode {
-    /// debump rolls back the program counter bump performed in the load operation of an
-    /// AddressingMode. This should be used in any instruction that uses both am.load and am.store
-    /// in the same block.
-    pub fn debump(&self, cpu: &mut CPU) {
-        match self {
-            AddressingMode::Implied => {}
-            AddressingMode::Accumulator => {}
-            AddressingMode::Immediate => cpu.reg.pc = cpu.reg.pc.wrapping_sub(1),
-            AddressingMode::Absolute => cpu.reg.pc = cpu.reg.pc.wrapping_sub(2),
-            AddressingMode::AbsoluteX => cpu.reg.pc = cpu.reg.pc.wrapping_sub(2),
-            AddressingMode::AbsoluteY => cpu.reg.pc = cpu.reg.pc.wrapping_sub(2),
-            AddressingMode::Indirect => cpu.reg.pc = cpu.reg.pc.wrapping_sub(2),
-            AddressingMode::IndirectX => cpu.reg.pc = cpu.reg.pc.wrapping_sub(1),
-            AddressingMode::IndirectY => cpu.reg.pc = cpu.reg.pc.wrapping_sub(1),
-            AddressingMode::ZeroPage => cpu.reg.pc = cpu.reg.pc.wrapping_sub(1),
-            AddressingMode::ZeroPageX => cpu.reg.pc = cpu.reg.pc.wrapping_sub(1),
-            AddressingMode::ZeroPageY => cpu.reg.pc = cpu.reg.pc.wrapping_sub(1),
-            AddressingMode::Relative => cpu.reg.pc = cpu.reg.pc.wrapping_sub(1),
-        }
-    }
-
-    fn load(&self, cpu: &mut CPU) -> u8 {
-        match self {
-            AddressingMode::Implied => panic!("invalid use of AddressingMode::Implied"),
-            AddressingMode::Accumulator => cpu.reg.a,
-            AddressingMode::Immediate => cpu.loadb_bump(),
-            AddressingMode::Relative => {
-                let offset = cpu.loadb_bump() as i8;
-                let addr = (cpu.reg.pc as i16).wrapping_add(offset as i16);
-                cpu.readb(addr as u16)
-            }
-            AddressingMode::ZeroPage => {
-                let addr = cpu.loadb_bump() as u16;
-                cpu.readb(addr)
-            }
-            AddressingMode::ZeroPageX => {
-                let addr = (cpu.loadb_bump().wrapping_add(cpu.reg.x)) as u16;
-                cpu.readb(addr)
-            }
-            AddressingMode::ZeroPageY => {
-                let addr = (cpu.loadb_bump().wrapping_add(cpu.reg.y)) as u16;
-                cpu.readb(addr)
-            }
-            AddressingMode::Absolute => {
-                let addr = cpu.loadw_bump();
-                cpu.readb(addr)
-            }
-            AddressingMode::AbsoluteX => {
-                let addr = cpu.loadw_bump().wrapping_add(cpu.reg.x as u16);
-                cpu.readb(addr)
-            }
-            AddressingMode::AbsoluteY => {
-                let addr = cpu.loadw_bump().wrapping_add(cpu.reg.y as u16);
-                cpu.readb(addr)
-            }
-            AddressingMode::Indirect => {
-                let addr = cpu.loadw_bump();
-                let addr = cpu.readw(addr);
-                cpu.readb(addr)
-            }
-            AddressingMode::IndirectX => {
-                let val = cpu.loadb_bump();
-                let x = cpu.reg.x;
-                let addr = cpu.readw_zp(val.wrapping_add(x));
-                cpu.readb(addr)
-            }
-            AddressingMode::IndirectY => {
-                let val = cpu.loadb_bump();
-                let y = cpu.reg.y;
-                let addr = cpu.readw_zp(val).wrapping_add(y as u16);
-                cpu.readb(addr)
-            }
-        }
-    }
-
-    fn store(&self, cpu: &mut CPU, val: u8) {
-        match self {
-            AddressingMode::Implied => panic!("invalid use of AddressingMode::Implied"),
-            AddressingMode::Accumulator => cpu.reg.a = val,
-            AddressingMode::Immediate => panic!("cannot store in AddressingMode::Immediate mode"),
-            AddressingMode::Relative => {
-                let offset = cpu.loadb_bump() as i8;
-                let addr = (cpu.reg.pc as i16).wrapping_add(offset as i16);
-                cpu.writeb(addr as u16, val);
-            }
-            AddressingMode::ZeroPage => {
-                let addr = cpu.loadb_bump();
-                cpu.writeb(addr as u16, val);
-            }
-            AddressingMode::ZeroPageX => {
-                let addr = (cpu.loadb_bump().wrapping_add(cpu.reg.x)) as u16;
-                cpu.writeb(addr, val);
-            }
-            AddressingMode::ZeroPageY => {
-                let addr = (cpu.loadb_bump().wrapping_add(cpu.reg.y)) as u16;
-                cpu.writeb(addr, val);
-            }
-            AddressingMode::Absolute => {
-                let addr = cpu.loadw_bump();
-                cpu.writeb(addr, val);
-            }
-            AddressingMode::AbsoluteX => {
-                let addr = cpu.loadw_bump().wrapping_add(cpu.reg.x as u16);
-                cpu.writeb(addr, val);
-            }
-            AddressingMode::AbsoluteY => {
-                let addr = cpu.loadw_bump().wrapping_add(cpu.reg.y as u16);
-                cpu.writeb(addr, val);
-            }
-            AddressingMode::Indirect => {
-                let addr = cpu.loadw_bump();
-                let addr = cpu.readw(addr);
-                cpu.writeb(addr, val);
-            }
-            AddressingMode::IndirectX => {
-                let x = cpu.reg.x;
-                let addr = cpu.loadb_bump();
-                let addr = cpu.readw_zp(addr.wrapping_add(x));
-                cpu.writeb(addr, val);
-            }
-            AddressingMode::IndirectY => {
-                let y = cpu.reg.y;
-                let addr = cpu.loadb_bump();
-                let addr = cpu.readw_zp(addr).wrapping_add(y as u16);
-                cpu.writeb(addr, val);
-            }
-        };
-    }
-}
-
 pub struct CPU {
     reg: Registers,
     ram: [u8; 0x0800],
     apu: [u8; 0x0018],
-    ppu: Arc<RwLock<PPU>>,
-    cartridge: Arc<RwLock<Cartridge>>,
+    ppu: Rc<RefCell<PPU>>,
+    cartridge: Rc<RefCell<Cartridge>>,
     #[cfg(feature = "debug")]
     logger: std::fs::File,
 }
 
 impl CPU {
-    pub fn new(cartridge: Arc<RwLock<Cartridge>>, ppu: Arc<RwLock<PPU>>) -> Self {
+    pub fn new(cartridge: Rc<RefCell<Cartridge>>, ppu: Rc<RefCell<PPU>>) -> Self {
         #[cfg(feature = "debug")]
         let file = std::fs::File::create("log.txt").unwrap();
         let mut cpu = CPU {
@@ -404,10 +260,10 @@ impl CPU {
     fn readb(&mut self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x1FFF => self.ram[addr as usize % 0x0800],
-            0x2000..=0x3FFF => self.ppu.write().unwrap().read(addr % 0x08),
+            0x2000..=0x3FFF => self.ppu.borrow_mut().read(addr % 0x08),
             0x4000..=0x4017 => self.apu[addr as usize % 0x0018],
             0x4018..=0x401F => 0,
-            0x4020..=0xFFFF => self.cartridge.read().unwrap().read(addr),
+            0x4020..=0xFFFF => self.cartridge.borrow().read(addr),
         }
     }
 
@@ -424,14 +280,14 @@ impl CPU {
     fn writeb(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x1FFF => self.ram[addr as usize % 0x0800] = val,
-            0x2000..=0x3FFF => self.ppu.write().unwrap().write(addr % 0x08, val),
+            0x2000..=0x3FFF => self.ppu.borrow_mut().write(addr % 0x08, val),
             0x4000..=0x4017 => self.apu[addr as usize % 0x0018] = val,
             0x4018..=0x401F => {}
             0x6000..=0x6003 => {}
             0x6004..=0x7FFF => {
                 print!("{}", val as char);
             }
-            0x4020..=0xFFFF => self.cartridge.write().unwrap().write(addr, val),
+            0x4020..=0xFFFF => self.cartridge.borrow_mut().write(addr, val),
         }
     }
 
@@ -1717,7 +1573,7 @@ mod test {
     use crate::cartridge::Cartridge;
     use crate::cpu::CPU;
     use crate::ppu::PPU;
-    use std::sync::{Arc, RwLock};
+    use std::sync::{Rc, RefCell};
 
     #[test]
     fn test_read() {
@@ -1726,9 +1582,9 @@ mod test {
         data[0xFFFE % 0xBFE0] = 0x01;
 
         let cart = Cartridge::from_data(data.to_vec());
-        let cart = Arc::new(RwLock::new(cart));
+        let cart = Rc::new(RefCell::new(cart));
         let ppu = PPU::new(cart.clone());
-        let ppu = Arc::new(RwLock::new(ppu));
+        let ppu = Rc::new(RefCell::new(ppu));
         let mut cpu = CPU::new(cart, ppu.clone());
 
         let opcode = cpu.loadb_bump();
@@ -1747,9 +1603,9 @@ mod test {
         data[0xFFFE % 0xBFE0] = 0x01;
 
         let cart = Cartridge::from_data(data.to_vec());
-        let cart = Arc::new(RwLock::new(cart));
+        let cart = Rc::new(RefCell::new(cart));
         let ppu = PPU::new(cart.clone());
-        let ppu = Arc::new(RwLock::new(ppu));
+        let ppu = Rc::new(RefCell::new(ppu));
         let mut cpu = CPU::new(cart, ppu.clone());
 
         let word = cpu.readw(0xFFFD);

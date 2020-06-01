@@ -12,7 +12,7 @@ pub trait Mapper {
         (hi << 8) | lo
     }
 
-    fn chr_at(&self, _: usize) -> Vec<u8>;
+    fn chr_at(&self, _: usize) -> &[u8];
 }
 
 pub struct Header {

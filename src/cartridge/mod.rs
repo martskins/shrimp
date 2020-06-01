@@ -16,7 +16,7 @@ impl Cartridge {
         self.mapper.writeb(addr, val)
     }
 
-    pub fn chr_at(&self, pos: usize) -> Vec<u8> {
+    pub fn chr_at(&self, pos: usize) -> &[u8] {
         self.mapper.chr_at(pos)
     }
 

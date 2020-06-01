@@ -3,7 +3,8 @@ mod register;
 use crate::cartridge::Cartridge;
 use crate::nes::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use register::{AddressLatch, Register};
-use std::sync::{Arc, RwLock};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 const VBLANK_SCANLINE: u16 = 241;
 const LAST_SCANLINE: u16 = 261;
@@ -32,13 +33,14 @@ pub struct PPU {
 
     scanline: u16,
 
-    cartridge: Arc<RwLock<Cartridge>>,
+    cartridge: Rc<RefCell<Cartridge>>,
 
     pub screen: [u8; PIXEL_COUNT],
+    pub frame_complete: bool,
 }
 
 impl PPU {
-    pub fn new(cartridge: Arc<RwLock<Cartridge>>) -> PPU {
+    pub fn new(cartridge: Rc<RefCell<Cartridge>>) -> PPU {
         PPU {
             ppuctrl: 0x10,
             ppumask: 0,
@@ -64,12 +66,15 @@ impl PPU {
             cartridge,
 
             screen: [0; PIXEL_COUNT],
+            frame_complete: false,
         }
     }
 }
 
 impl PPU {
     pub fn tick(&mut self, cycles: u8) {
+        self.frame_complete = false;
+
         for _ in 0..cycles {
             if self.scanline < (SCREEN_HEIGHT as u16) {
                 self.render_scanline();
@@ -80,6 +85,7 @@ impl PPU {
             if self.scanline == VBLANK_SCANLINE {
                 self.set_vblank(true);
             } else if self.scanline == LAST_SCANLINE {
+                self.frame_complete = true;
                 self.scanline = 0;
                 self.set_vblank(false);
             }
@@ -94,15 +100,15 @@ impl PPU {
             // the pixel in the scanline divided by 8.
             let sprite_idx = (x / 8) + (self.scanline as usize / 8) * 32;
             let sprite_idx = self.nametable_0[sprite_idx];
-            let sprite = self.cartridge.read().unwrap().chr_at(sprite_idx as usize);
-            if sprite.is_empty() {
-                continue;
-            }
 
             // the position of the pixel we want from the sprite.
             let chr_x = x as u8 % 8;
             let chr_y = self.scanline as u8 % 8;
-            let pixel = PPU::get_sprite_pixel(&sprite, chr_x, chr_y);
+            let pixel = PPU::get_sprite_pixel(
+                self.cartridge.borrow().chr_at(sprite_idx as usize),
+                chr_x,
+                chr_y,
+            );
 
             // put pixel at screen's (x, scanline).
             let scanline = self.scanline as usize;
@@ -133,7 +139,7 @@ impl PPU {
 
     fn set_vblank(&mut self, val: bool) {
         if val {
-            self.ppustatus = self.ppustatus | 0x80;
+            self.ppustatus |= 0x80;
         }
     }
 
@@ -155,7 +161,7 @@ impl PPU {
     fn readb(&self, addr: u16) -> u8 {
         let addr = PPU::map_addr(addr) as usize;
         match addr {
-            0x0000..=0x1FFF => self.cartridge.read().unwrap().read(addr as u16),
+            0x0000..=0x1FFF => self.cartridge.borrow().read(addr as u16),
             0x2000..=0x23FF => self.nametable_0[addr % 0x0400],
             0x2400..=0x27FF => self.nametable_1[addr % 0x0400],
             0x2800..=0x2BFF => self.nametable_2[addr % 0x0400],
@@ -168,7 +174,7 @@ impl PPU {
     fn writeb(&mut self, addr: u16, val: u8) {
         let addr = PPU::map_addr(addr) as usize;
         match addr {
-            0x0000..=0x1FFF => self.cartridge.write().unwrap().write(addr as u16, val),
+            0x0000..=0x1FFF => self.cartridge.borrow_mut().write(addr as u16, val),
             0x2000..=0x23FF => self.nametable_0[addr % 0x0400] = val,
             0x2400..=0x27FF => self.nametable_1[addr % 0x0400] = val,
             0x2800..=0x2BFF => self.nametable_2[addr % 0x0400] = val,
