@@ -116,15 +116,16 @@ impl PPU {
         }
     }
 
+    #[inline(always)]
     fn get_sprite_pixel(sprite: &[u8], x: u8, y: u8) -> u8 {
         let x = 7 - x;
-        let base: u8 = 2;
+        let bit_index = 0x01 << x;
 
         let line = sprite[y as usize];
-        let lsb = line & base.pow(x as u32);
+        let lsb = line & bit_index;
 
         let line = sprite[y as usize + 8];
-        let msb = line & base.pow(x as u32);
+        let msb = line & bit_index;
 
         if lsb | msb > 0 {
             128
@@ -158,6 +159,7 @@ impl PPU {
         }
     }
 
+    #[inline(always)]
     fn readb(&self, addr: u16) -> u8 {
         let addr = PPU::map_addr(addr) as usize;
         match addr {
