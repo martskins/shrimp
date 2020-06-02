@@ -1,7 +1,10 @@
 mod register;
 
 use crate::cartridge::Cartridge;
-use crate::nes::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::{
+    cpu::CPU,
+    nes::{SCREEN_HEIGHT, SCREEN_WIDTH},
+};
 use register::{AddressLatch, Register};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,6 +12,7 @@ use std::rc::Rc;
 const VBLANK_SCANLINE: u16 = 241;
 const LAST_SCANLINE: u16 = 261;
 const PIXEL_COUNT: usize = (SCREEN_HEIGHT * SCREEN_WIDTH * 3) as usize;
+const CYCLES_PER_SCANLINE: u64 = 114; // 29781 cycles per frame / 261 scanlines
 
 pub struct PPU {
     ppuctrl: u8,
@@ -37,6 +41,8 @@ pub struct PPU {
 
     pub screen: [u8; PIXEL_COUNT],
     pub frame_complete: bool,
+    has_blanked: bool,
+    cycles: u64,
 }
 
 impl PPU {
@@ -67,15 +73,22 @@ impl PPU {
 
             screen: [0; PIXEL_COUNT],
             frame_complete: false,
+
+            has_blanked: false,
+            cycles: 0,
         }
     }
 }
 
 impl PPU {
-    pub fn tick(&mut self, cycles: u8) {
+    pub fn tick(&mut self, cpu: &mut CPU) {
         self.frame_complete = false;
 
-        for _ in 0..cycles {
+        loop {
+            if self.cycles + CYCLES_PER_SCANLINE > cpu.cycles {
+                break;
+            }
+
             if self.scanline < (SCREEN_HEIGHT as u16) {
                 self.render_scanline();
             }
@@ -84,12 +97,22 @@ impl PPU {
 
             if self.scanline == VBLANK_SCANLINE {
                 self.set_vblank(true);
+                self.ppustatus &= 0xBF;
+                if self.vblank_nmi() {
+                    cpu.nmi();
+                }
             } else if self.scanline == LAST_SCANLINE {
                 self.frame_complete = true;
                 self.scanline = 0;
                 self.set_vblank(false);
             }
+
+            self.cycles += CYCLES_PER_SCANLINE;
         }
+    }
+
+    pub fn vblank_nmi(&self) -> bool {
+        self.ppuctrl & 0x80 != 0
     }
 
     // walks through the nametable to get the correct sprite index, then fetches that sprite from
@@ -116,8 +139,11 @@ impl PPU {
         }
     }
 
-    #[inline(always)]
     fn get_sprite_pixel(sprite: &[u8], x: u8, y: u8) -> u8 {
+        if sprite.is_empty() {
+            return 0;
+        }
+
         let x = 7 - x;
         let bit_index = 0x01 << x;
 
@@ -138,9 +164,13 @@ impl PPU {
         self.ppustatus & 0x80 > 0
     }
 
-    fn set_vblank(&mut self, val: bool) {
+    pub fn set_vblank(&mut self, val: bool) {
+        self.has_blanked = true;
+
         if val {
             self.ppustatus |= 0x80;
+        } else {
+            self.ppustatus &= !0x80;
         }
     }
 
@@ -200,7 +230,9 @@ impl PPU {
             Register::PPUMASK => self.ppumask,
             Register::PPUSTATUS => {
                 let val = self.ppustatus;
+                self.ppustatus &= 0x7F;
                 self.address_latch = AddressLatch::HI;
+                self.scroll_latch = AddressLatch::HI;
                 val
             }
             Register::OAMADDR => panic!("OAMADDR is write only"), // self.oamaddr,
@@ -212,16 +244,16 @@ impl PPU {
         }
     }
 
-    pub fn set_nmi(&mut self) {
-        self.ppustatus |= 0x80;
-    }
-
     pub fn write(&mut self, addr: u16, val: u8) {
         debug_assert!(addr <= 7);
 
         let reg: Register = (addr as usize).into();
         match reg {
-            Register::PPUCTRL => self.ppuctrl = val,
+            Register::PPUCTRL => {
+                self.address_latch = AddressLatch::HI;
+                self.ppustatus &= 0x7F;
+                self.ppuctrl = val
+            }
             Register::PPUMASK => self.ppumask = val,
             Register::PPUSTATUS => {
                 // self.address_latch.next();

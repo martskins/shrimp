@@ -28,18 +28,12 @@ impl NES {
         Self { cpu, ppu }
     }
 
-    fn tick(&mut self) {
-        let cycles = self.cpu.tick();
-        let mut ppu = self.ppu.borrow_mut();
-        ppu.tick(cycles);
-    }
-
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let sdl_context = sdl2::init()?;
         let video_subsystem: sdl2::VideoSubsystem = sdl_context.video()?;
 
         let window = video_subsystem
-            .window("NESMULATOR", SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
+            .window("CLITONES", SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
             .opengl()
             .build()?;
 
@@ -57,18 +51,16 @@ impl NES {
         )?;
 
         'running: loop {
-            self.tick();
+            self.cpu.tick();
+            let mut ppu = self.ppu.borrow_mut();
+            ppu.tick(&mut self.cpu);
 
-            {
-                let ppu = self.ppu.borrow();
-                let screen = ppu.screen;
-                if ppu.frame_complete {
-                    texture.update(None, &screen, SCREEN_WIDTH * 3)?;
+            if ppu.frame_complete {
+                texture.update(None, &ppu.screen, SCREEN_WIDTH * 3)?;
 
-                    canvas.clear();
-                    canvas.copy(&texture, None, None)?;
-                    canvas.present();
-                }
+                canvas.clear();
+                canvas.copy(&texture, None, None)?;
+                canvas.present();
             }
 
             while let Some(event) = event_pump.poll_event() {
@@ -76,9 +68,7 @@ impl NES {
                     Event::KeyDown {
                         keycode: Some(Keycode::Return),
                         ..
-                    } => {
-                        self.ppu.borrow_mut().set_nmi();
-                    }
+                    } => ppu.set_vblank(true),
                     Event::KeyDown {
                         keycode: Some(Keycode::R),
                         ..

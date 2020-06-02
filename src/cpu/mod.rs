@@ -22,6 +22,7 @@ pub struct CPU {
     cartridge: Rc<RefCell<Cartridge>>,
     #[cfg(feature = "debug")]
     logger: std::fs::File,
+    pub cycles: u64,
 }
 
 impl CPU {
@@ -36,13 +37,33 @@ impl CPU {
             cartridge,
             #[cfg(feature = "debug")]
             logger: file,
+            cycles: 7,
         };
         cpu.reset();
         cpu
     }
 
+    pub fn nmi(&mut self) {
+        let (pc, flags) = (self.reg.pc, self.reg.p);
+        self.pushw(pc);
+        self.pushb(flags);
+        self.reg.pc = self.readw(NMI_VECTOR);
+    }
+
+    pub fn irq(&mut self) {
+        if self.reg.get_flag(Flag::I) {
+            return;
+        }
+
+        let (pc, flags) = (self.reg.pc, self.reg.p);
+        self.pushw(pc);
+        self.pushb(flags);
+        self.reg.pc = self.readw(BRK_VECTOR);
+    }
+
     pub fn reset(&mut self) {
         self.reg.pc = self.readw(RESET_VECTOR);
+        // self.reg.pc = 0xC000;
         self.reg.p = 0x24;
     }
 
@@ -53,13 +74,13 @@ impl CPU {
         let opcode = self.loadb_bump();
 
         #[cfg(feature = "debug")]
-        writeln!(
+        write!(
             &mut self.logger,
             "{:04X} {:02X} \t\t A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
             pc, opcode, self.reg.a, self.reg.x, self.reg.y, self.reg.p, self.reg.s,
         )
         .unwrap();
-        match opcode {
+        let cycles = match opcode {
             0x69 => self.adc(AddressingMode::Immediate),
             0x65 => self.adc(AddressingMode::ZeroPage),
             0x75 => self.adc(AddressingMode::ZeroPageX),
@@ -240,7 +261,13 @@ impl CPU {
             0x98 => self.tya(AddressingMode::Implied),
 
             n => panic!("opcode {:X} not implemented", n),
-        }
+        };
+
+        #[cfg(feature = "debug")]
+        writeln!(&mut self.logger, "\t CYC:{}", self.cycles).unwrap();
+
+        self.cycles += cycles as u64;
+        cycles
     }
 
     /// loads the byte at the program counter and advances the program counter.
@@ -268,7 +295,9 @@ impl CPU {
     }
 
     fn readw_zp(&mut self, addr: u8) -> u16 {
-        self.readb(addr as u16) as u16 | (self.readb((addr + 1) as u16) as u16) << 8
+        // TODO : this warpping_add may be incorrect
+        self.readb(addr as u16) as u16 | (self.readb((addr.wrapping_add(1)) as u16) as u16) << 8
+        // self.readb(addr as u16) as u16 | (self.readb((addr + 1) as u16) as u16) << 8
     }
 
     fn readw(&mut self, addr: u16) -> u16 {
@@ -278,6 +307,10 @@ impl CPU {
     }
 
     fn writeb(&mut self, addr: u16, val: u8) {
+        if addr == 0x4014 {
+            return self.dma(val);
+        }
+
         match addr {
             0x0000..=0x1FFF => self.ram[addr as usize % 0x0800] = val,
             0x2000..=0x3FFF => self.ppu.borrow_mut().write(addr % 0x08, val),
@@ -295,6 +328,19 @@ impl CPU {
         self.reg.set_flag(Flag::Z, res == 0x00);
         self.reg.set_flag(Flag::N, res & 0x80 == 0x80);
     }
+
+    fn dma(&mut self, hi_addr: u8) {
+        let start = (hi_addr as u16) << 8;
+
+        for addr in start..start + 256 {
+            let val = self.readb(addr);
+            self.writeb(0x2004, val);
+
+            // FIXME: The last address sometimes takes 1 cycle, sometimes 2 -- NESdev isn't very
+            // clear on this.
+            self.cycles += 2;
+        }
+    }
 }
 
 /// CPU opcodes
@@ -304,9 +350,9 @@ impl CPU {
     ///  A + M + C -> A, C                N Z C I D V
     ///                                   + + + - - +
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
-    ///  immidiate     ADC #oper     69    2     2
+    ///  immediate     ADC #oper     69    2     2
     ///  zeropage      ADC oper      65    2     3
     ///  zeropage,X    ADC oper,X    75    2     4
     ///  absolute      ADC oper      6D    3     4
@@ -317,7 +363,11 @@ impl CPU {
     fn adc(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         let acc = self.reg.a;
-        let res = mem as u16 + acc as u16;
+        let mut res = mem as u16 + acc as u16;
+        if self.reg.get_flag(Flag::C) {
+            res += 1;
+        }
+
         self.reg.set_flag(Flag::C, res > 0xFF);
         let res = res as u8;
         self.reg.set_flag(
@@ -344,9 +394,9 @@ impl CPU {
     ///  A AND M -> A                     N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
-    ///  immidiate     AND #oper     29    2     2
+    ///  immediate     AND #oper     29    2     2
     ///  zeropage      AND oper      25    2     3
     ///  zeropage,X    AND oper,X    35    2     4
     ///  absolute      AND oper      2D    3     4
@@ -378,7 +428,7 @@ impl CPU {
     ///  C <- [76543210] <- 0             N Z C I D V
     ///                                   + + + - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  accumulator   ASL A         0A    1     2
     ///  zeropage      ASL oper      06    2     5
@@ -407,14 +457,14 @@ impl CPU {
     ///  branch on C = 0                  N Z C I D V
     ///                                   - - - - - -
 
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  relative      BCC oper      90    2     2**
     fn bcc(&mut self, am: AddressingMode) -> u8 {
-        self.branch_if(!self.reg.get_flag(Flag::C));
+        let additional_cycles = self.branch_if(!self.reg.get_flag(Flag::C));
 
         match am {
-            AddressingMode::Relative => 2,
+            AddressingMode::Relative => 2 + additional_cycles,
             _ => unreachable!(),
         }
     }
@@ -423,14 +473,14 @@ impl CPU {
     ///  branch on C = 1                  N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  relative      BCS oper      B0    2     2**
     fn bcs(&mut self, am: AddressingMode) -> u8 {
-        self.branch_if(self.reg.get_flag(Flag::C));
+        let additional_cycles = self.branch_if(self.reg.get_flag(Flag::C));
 
         match am {
-            AddressingMode::Relative => 2,
+            AddressingMode::Relative => 2 + additional_cycles,
             _ => unreachable!(),
         }
     }
@@ -439,14 +489,14 @@ impl CPU {
     ///  branch on Z = 1                  N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  relative      BEQ oper      F0    2     2**
     fn beq(&mut self, am: AddressingMode) -> u8 {
-        self.branch_if(self.reg.get_flag(Flag::Z));
+        let additional_cycles = self.branch_if(self.reg.get_flag(Flag::Z));
 
         match am {
-            AddressingMode::Relative => 2,
+            AddressingMode::Relative => 2 + additional_cycles,
             _ => unreachable!(),
         }
     }
@@ -457,7 +507,7 @@ impl CPU {
     ///
     ///  A AND M, M7 -> N, M6 -> V        N Z C I D V
     ///                                  M7 + - - - M6
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  zeropage      BIT oper      24    2     3
     ///  absolute      BIT oper      2C    3     4
@@ -478,14 +528,14 @@ impl CPU {
     ///  branch on N = 1                  N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  relative      BMI oper      30    2     2**
     fn bmi(&mut self, am: AddressingMode) -> u8 {
-        self.branch_if(self.reg.get_flag(Flag::N));
+        let additional_cycles = self.branch_if(self.reg.get_flag(Flag::N));
 
         match am {
-            AddressingMode::Relative => 2,
+            AddressingMode::Relative => 2 + additional_cycles,
             _ => unreachable!(),
         }
     }
@@ -494,14 +544,14 @@ impl CPU {
     ///  branch on Z = 0                  N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  relative      BNE oper      D0    2     2**
     fn bne(&mut self, am: AddressingMode) -> u8 {
-        self.branch_if(!self.reg.get_flag(Flag::Z));
+        let additional_cycles = self.branch_if(!self.reg.get_flag(Flag::Z));
 
         match am {
-            AddressingMode::Relative => 2,
+            AddressingMode::Relative => 2 + additional_cycles,
             _ => unreachable!(),
         }
     }
@@ -510,14 +560,14 @@ impl CPU {
     ///  branch on N = 0                  N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  relative      BPL oper      10    2     2**
     fn bpl(&mut self, am: AddressingMode) -> u8 {
-        self.branch_if(!self.reg.get_flag(Flag::N));
+        let additional_cycles = self.branch_if(!self.reg.get_flag(Flag::N));
 
         match am {
-            AddressingMode::Relative => 2,
+            AddressingMode::Relative => 2 + additional_cycles,
             _ => unreachable!(),
         }
     }
@@ -526,7 +576,7 @@ impl CPU {
     ///  interrupt,                       N Z C I D V
     ///  push PC+2, push SR               - - - 1 - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       BRK           00    1     7
     fn brk(&mut self, am: AddressingMode) -> u8 {
@@ -547,14 +597,14 @@ impl CPU {
     ///  branch on V = 0                  N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  relative      BVC oper      50    2     2**
     fn bvc(&mut self, am: AddressingMode) -> u8 {
-        self.branch_if(!self.reg.get_flag(Flag::V));
+        let additional_cycles = self.branch_if(!self.reg.get_flag(Flag::V));
 
         match am {
-            AddressingMode::Relative => 2,
+            AddressingMode::Relative => 2 + additional_cycles,
             _ => unreachable!(),
         }
     }
@@ -563,14 +613,14 @@ impl CPU {
     ///  branch on V = 1                  N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  relative      BVC oper      70    2     2**
     fn bvs(&mut self, am: AddressingMode) -> u8 {
-        self.branch_if(self.reg.get_flag(Flag::V));
+        let additional_cycles = self.branch_if(self.reg.get_flag(Flag::V));
 
         match am {
-            AddressingMode::Relative => 2,
+            AddressingMode::Relative => 2 + additional_cycles,
             _ => unreachable!(),
         }
     }
@@ -579,7 +629,7 @@ impl CPU {
     ///  0 -> C                           N Z C I D V
     ///                                   - - 0 - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       CLC           18    1     2
     fn clc(&mut self, am: AddressingMode) -> u8 {
@@ -595,7 +645,7 @@ impl CPU {
     ///  0 -> D                           N Z C I D V
     ///                                   - - - - 0 -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       CLD           D8    1     2
     fn cld(&mut self, am: AddressingMode) -> u8 {
@@ -611,7 +661,7 @@ impl CPU {
     ///  0 -> I                           N Z C I D V
     ///                                   - - - 0 - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       CLI           58    1     2
     fn cli(&mut self, am: AddressingMode) -> u8 {
@@ -627,7 +677,7 @@ impl CPU {
     ///  0 -> V                           N Z C I D V
     ///                                   - - - - - 0
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       CLV           B8    1     2
     fn clv(&mut self, am: AddressingMode) -> u8 {
@@ -643,9 +693,9 @@ impl CPU {
     ///  A - M                          N Z C I D V
     ///                                 + + + - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
-    ///  immidiate     CMP #oper     C9    2     2
+    ///  immediate     CMP #oper     C9    2     2
     ///  zeropage      CMP oper      C5    2     3
     ///  zeropage,X    CMP oper,X    D5    2     4
     ///  absolute      CMP oper      CD    3     4
@@ -674,9 +724,9 @@ impl CPU {
     ///  X - M                            N Z C I D V
     ///                                   + + + - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
-    ///  immidiate     CPX #oper     E0    2     2
+    ///  immediate     CPX #oper     E0    2     2
     ///  zeropage      CPX oper      E4    2     3
     ///  absolute      CPX oper      EC    3     4
     fn cpx(&mut self, am: AddressingMode) -> u8 {
@@ -695,9 +745,9 @@ impl CPU {
     ///  Y - M                            N Z C I D V
     ///                                   + + + - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
-    ///  immidiate     CPY #oper     C0    2     2
+    ///  immediate     CPY #oper     C0    2     2
     ///  zeropage      CPY oper      C4    2     3
     ///  absolute      CPY oper      CC    3     4
     fn cpy(&mut self, am: AddressingMode) -> u8 {
@@ -716,7 +766,7 @@ impl CPU {
     ///  M - 1 -> M                       N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  zeropage      DEC oper      C6    2     5
     ///  zeropage,X    DEC oper,X    D6    2     6
@@ -742,7 +792,7 @@ impl CPU {
     ///  X - 1 -> X                       N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       DEC           CA    1     2
     fn dex(&mut self, am: AddressingMode) -> u8 {
@@ -761,7 +811,7 @@ impl CPU {
     ///  Y - 1 -> Y                       N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       DEC           88    1     2
     fn dey(&mut self, am: AddressingMode) -> u8 {
@@ -780,9 +830,9 @@ impl CPU {
     ///  A EOR M -> A                     N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
-    ///  immidiate     EOR #oper     49    2     2
+    ///  immediate     EOR #oper     49    2     2
     ///  zeropage      EOR oper      45    2     3
     ///  zeropage,X    EOR oper,X    55    2     4
     ///  absolute      EOR oper      4D    3     4
@@ -814,7 +864,7 @@ impl CPU {
     ///  M + 1 -> M                       N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  zeropage      INC oper      E6    2     5
     ///  zeropage,X    INC oper,X    F6    2     6
@@ -840,7 +890,7 @@ impl CPU {
     ///  X + 1 -> X                       N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       INX           E8    1     2
     fn inx(&mut self, am: AddressingMode) -> u8 {
@@ -859,7 +909,7 @@ impl CPU {
     ///  Y + 1 -> Y                       N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       INY           C8    1     2
     fn iny(&mut self, am: AddressingMode) -> u8 {
@@ -878,7 +928,7 @@ impl CPU {
     ///  (PC+1) -> PCL                    N Z C I D V
     ///  (PC+2) -> PCH                    - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  absolute      JMP oper      4C    3     3
     ///  indirect      JMP (oper)    6C    3     5
@@ -907,7 +957,7 @@ impl CPU {
     ///  (PC+1) -> PCL                    - - - - - -
     ///  (PC+2) -> PCH
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  absolute      JSR oper      20    3     6
     fn jsr(&mut self, am: AddressingMode) -> u8 {
@@ -926,9 +976,9 @@ impl CPU {
     ///  M -> A                           N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
-    ///  immidiate     LDA #oper     A9    2     2
+    ///  immediate     LDA #oper     A9    2     2
     ///  zeropage      LDA oper      A5    2     3
     ///  zeropage,X    LDA oper,X    B5    2     4
     ///  absolute      LDA oper      AD    3     4
@@ -958,9 +1008,9 @@ impl CPU {
     ///  M -> X                           N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
-    ///  immidiate     LDX #oper     A2    2     2
+    ///  immediate     LDX #oper     A2    2     2
     ///  zeropage      LDX oper      A6    2     3
     ///  zeropage,Y    LDX oper,Y    B6    2     4
     ///  absolute      LDX oper      AE    3     4
@@ -984,9 +1034,9 @@ impl CPU {
     ///  M -> Y                           N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
-    ///  immidiate     LDY #oper     A0    2     2
+    ///  immediate     LDY #oper     A0    2     2
     ///  zeropage      LDY oper      A4    2     3
     ///  zeropage,X    LDY oper,X    B4    2     4
     ///  absolute      LDY oper      AC    3     4
@@ -1010,7 +1060,7 @@ impl CPU {
     ///  0 -> [76543210] -> C             N Z C I D V
     ///                                   0 + + - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  accumulator   LSR A         4A    1     2
     ///  zeropage      LSR oper      46    2     5
@@ -1040,7 +1090,7 @@ impl CPU {
     ///  ---                              N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       NOP           EA    1     2
     fn nop(&mut self, am: AddressingMode) -> u8 {
@@ -1054,9 +1104,9 @@ impl CPU {
     ///  A OR M -> A                      N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
-    ///  immidiate     ORA #oper     09    2     2
+    ///  immediate     ORA #oper     09    2     2
     ///  zeropage      ORA oper      05    2     3
     ///  zeropage,X    ORA oper,X    15    2     4
     ///  absolute      ORA oper      0D    3     4
@@ -1088,7 +1138,7 @@ impl CPU {
     ///  push A                           N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       PHA           48    1     3
     fn pha(&mut self, am: AddressingMode) -> u8 {
@@ -1105,7 +1155,7 @@ impl CPU {
     ///  push SR                          N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       PHP           08    1     3
     fn php(&mut self, am: AddressingMode) -> u8 {
@@ -1122,7 +1172,7 @@ impl CPU {
     ///  pull A                           N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       PLA           68    1     4
     fn pla(&mut self, am: AddressingMode) -> u8 {
@@ -1140,7 +1190,7 @@ impl CPU {
     ///  pull SR                          N Z C I D V
     ///                                   from stack
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       PLP           28    1     4
     fn plp(&mut self, am: AddressingMode) -> u8 {
@@ -1157,7 +1207,7 @@ impl CPU {
     ///  C <- [76543210] <- C             N Z C I D V
     ///                                   + + + - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  accumulator   ROL A         2A    1     2
     ///  zeropage      ROL oper      26    2     5
@@ -1189,7 +1239,7 @@ impl CPU {
     ///  C -> [76543210] -> C             N Z C I D V
     ///                                   + + + - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  accumulator   ROR A         6A    1     2
     ///  zeropage      ROR oper      66    2     5
@@ -1221,7 +1271,7 @@ impl CPU {
     ///  pull SR, pull PC                 N Z C I D V
     ///                                   from stack
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       RTI           40    1     6
     fn rti(&mut self, am: AddressingMode) -> u8 {
@@ -1240,7 +1290,7 @@ impl CPU {
     ///  pull PC, PC+1 -> PC              N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       RTS           60    1     6
     fn rts(&mut self, am: AddressingMode) -> u8 {
@@ -1256,9 +1306,9 @@ impl CPU {
     ///  A - M - C -> A                   N Z C I D V
     ///                                   + + + - - +
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
-    ///  immidiate     SBC #oper     E9    2     2
+    ///  immediate     SBC #oper     E9    2     2
     ///  zeropage      SBC oper      E5    2     3
     ///  zeropage,X    SBC oper,X    F5    2     4
     ///  absolute      SBC oper      ED    3     4
@@ -1298,7 +1348,7 @@ impl CPU {
     ///  1 -> C                           N Z C I D V
     ///                                   - - 1 - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       SEC           38    1     2
     fn sec(&mut self, am: AddressingMode) -> u8 {
@@ -1314,7 +1364,7 @@ impl CPU {
     ///  1 -> D                           N Z C I D V
     ///                                   - - - - 1 -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       SED           F8    1     2
     fn sed(&mut self, am: AddressingMode) -> u8 {
@@ -1330,7 +1380,7 @@ impl CPU {
     ///  1 -> I                           N Z C I D V
     ///                                   - - - 1 - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       SEI           78    1     2
     fn sei(&mut self, am: AddressingMode) -> u8 {
@@ -1346,7 +1396,7 @@ impl CPU {
     ///  A -> M                           N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  zeropage      STA oper      85    2     3
     ///  zeropage,X    STA oper,X    95    2     4
@@ -1375,7 +1425,7 @@ impl CPU {
     ///  X -> M                           N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  zeropage      STX oper      86    2     3
     ///  zeropage,Y    STX oper,Y    96    2     4
@@ -1396,7 +1446,7 @@ impl CPU {
     ///  Y -> M                           N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  zeropage      STY oper      84    2     3
     ///  zeropage,X    STY oper,X    94    2     4
@@ -1417,7 +1467,7 @@ impl CPU {
     ///  A -> X                           N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       TAX           AA    1     2
     fn tax(&mut self, am: AddressingMode) -> u8 {
@@ -1435,7 +1485,7 @@ impl CPU {
     ///  A -> Y                           N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       TAY           A8    1     2
     fn tay(&mut self, am: AddressingMode) -> u8 {
@@ -1453,7 +1503,7 @@ impl CPU {
     ///  SP -> X                          N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       TSX           BA    1     2
     fn tsx(&mut self, am: AddressingMode) -> u8 {
@@ -1471,7 +1521,7 @@ impl CPU {
     ///  X -> A                           N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       TXA           8A    1     2
     fn txa(&mut self, am: AddressingMode) -> u8 {
@@ -1489,13 +1539,12 @@ impl CPU {
     ///  X -> SP                          N Z C I D V
     ///                                   - - - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       TXS           9A    1     2
     fn txs(&mut self, am: AddressingMode) -> u8 {
         let reg = self.reg.x;
         self.reg.s = reg;
-        self.set_zn(reg);
 
         match am {
             AddressingMode::Implied => 2,
@@ -1507,7 +1556,7 @@ impl CPU {
     ///  Y -> A                           N Z C I D V
     ///                                   + + - - - -
     ///
-    ///  addressing    assembler    opc  bytes  cyles
+    ///  addressing    assembler    opc  bytes  cycles
     ///  --------------------------------------------
     ///  implied       TYA           98    1     2
     fn tya(&mut self, am: AddressingMode) -> u8 {
@@ -1530,7 +1579,7 @@ impl CPU {
     fn popb(&mut self) -> u8 {
         self.reg.s = self.reg.s.wrapping_add(1);
         let sp = self.reg.s as u16;
-        self.readb(0x100 | sp)
+        self.readb(0x100 + sp)
     }
 
     fn popw(&mut self) -> u16 {
@@ -1541,7 +1590,7 @@ impl CPU {
 
     fn pushb(&mut self, val: u8) {
         let sp = self.reg.s as u16;
-        self.writeb(0x100 | sp, val);
+        self.writeb(0x100 + sp, val);
         self.reg.s = self.reg.s.wrapping_sub(1);
     }
 
@@ -1553,11 +1602,23 @@ impl CPU {
     }
 
     /// performs a branch if the given condition is met.
-    fn branch_if(&mut self, cond: bool) {
+    fn branch_if(&mut self, cond: bool) -> u8 {
         let val = self.loadb_bump() as i8;
+        let old_pc = self.reg.pc;
         if cond {
             self.reg.pc = (self.reg.pc as i32 + val as i32) as u16;
         }
+
+        let mut cycles = 0;
+        if cond {
+            cycles += 1;
+        }
+
+        if self.reg.pc & 0xFF00 > old_pc & 0xFF00 {
+            cycles += 2;
+        }
+
+        cycles
     }
 
     /// performs x - y and set the appropiate flags.
@@ -1573,7 +1634,8 @@ mod test {
     use crate::cartridge::Cartridge;
     use crate::cpu::CPU;
     use crate::ppu::PPU;
-    use std::sync::{Rc, RefCell};
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     #[test]
     fn test_read() {

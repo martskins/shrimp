@@ -13,7 +13,7 @@ impl AddressLatch {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Register {
     PPUCTRL,   // 0x2000
     PPUMASK,   // 0x2001
