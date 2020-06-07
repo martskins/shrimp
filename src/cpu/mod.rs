@@ -260,6 +260,19 @@ impl CPU {
             0x9A => self.txs(AddressingMode::Implied),
             0x98 => self.tya(AddressingMode::Implied),
 
+            // unofficial opcodes
+            0x0C => self.ign(AddressingMode::Absolute),
+            0x1C | 0x3C | 0x5C | 0x7C | 0xDC | 0xFC => self.ign(AddressingMode::AbsoluteX),
+            0x04 | 0x44 | 0x64 => self.ign(AddressingMode::Indirect),
+            0x14 | 0x34 | 0x54 | 0x74 | 0xD4 | 0xF4 => self.ign(AddressingMode::IndirectX),
+            0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA => self.nop(AddressingMode::Implied),
+            0x80 | 0x82 | 0x89 | 0xC2 | 0xE2 => self.skb(AddressingMode::Immediate),
+
+            0x4B => self.alr(AddressingMode::Immediate),
+            0x0B | 0x2B => self.anc(AddressingMode::Immediate),
+            0x6B => self.arr(AddressingMode::Immediate),
+            0xCB => self.axs(AddressingMode::Immediate),
+
             n => panic!("opcode {:X} not implemented", n),
         };
 
@@ -339,6 +352,95 @@ impl CPU {
             // FIXME: The last address sometimes takes 1 cycle, sometimes 2 -- NESdev isn't very
             // clear on this.
             self.cycles += 2;
+        }
+    }
+}
+
+/// CPU unofficial opcodes
+impl CPU {
+    /// Reads from memory at the specified address and ignores the value. Affects no register nor
+    /// flags. The absolute version can be used to increment PPUADDR or reset the PPUSTATUS latch
+    /// as an alternative to BIT. The zero page version has no side effects.  IGN d,X reads from
+    /// both d and (d+X)&255. IGN a,X additionally reads from a+X-256 it crosses a page boundary
+    /// (i.e. if ((a & 255) + X) > 255) Sometimes called TOP (triple-byte no-op), SKW (skip word),
+    /// DOP (double-byte no-op), or SKB (skip byte).
+    fn ign(&mut self, am: AddressingMode) -> u8 {
+        let _ = am.load(self);
+
+        match am {
+            AddressingMode::Absolute => 3,
+            AddressingMode::AbsoluteX => 4,
+            AddressingMode::Indirect => 3,
+            AddressingMode::IndirectX => 4,
+            _ => unreachable!(),
+        }
+    }
+
+    /// These unofficial opcodes just read an immediate byte and skip it, like a different address
+    /// mode of NOP. One of these even works almost the same way on 65C02, HuC6280, and 65C816: BIT
+    /// #i ($89 ii), whose only difference from the 6502 is that it affects the NVZ flags like the
+    /// other BIT instructions. Use this SKB if you want your code to be portable to Lynx, TG16, or
+    /// Super NES. Puzznic uses $89, and Beauty and the Beast uses $80. Also called DOP, NOP
+    /// (distinguished from the 1-byte encoding by the addressing mode).
+    fn skb(&mut self, am: AddressingMode) -> u8 {
+        let _ = am.load(self);
+
+        match am {
+            AddressingMode::Immediate => 2,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Equivalent to AND #i then LSR A. Some sources call this "ASR"; we do not follow this out of
+    /// confusion with the mnemonic for a pseudoinstruction that combines CMP #$80 (or ANC #$FF)
+    /// then ROR. Note that ALR #$FE acts like LSR followed by CLC.
+    fn alr(&mut self, am: AddressingMode) -> u8 {
+        self.and(am.clone());
+        self.lsr(AddressingMode::Accumulator);
+
+        match am {
+            AddressingMode::Immediate => 2,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Does AND #i, setting N and Z flags based on the result. Then it copies N (bit 7) to C. ANC
+    /// #$FF could be useful for sign-extending, much like CMP #$80. ANC #$00 acts like LDA #$00
+    /// followed by CLC.
+    fn anc(&mut self, am: AddressingMode) -> u8 {
+        self.and(am.clone());
+        self.reg.set_flag(Flag::C, self.reg.get_flag(Flag::N));
+
+        match am {
+            AddressingMode::Immediate => 2,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Similar to AND #i then ROR A, except sets the flags differently. N and Z are normal, but C
+    /// is bit 6 and V is bit 6 xor bit 5. A fast way to perform signed division by 4 is: CMP #$80;
+    /// ARR #$FF; ROR. This can be extended to larger powers of two.
+    fn arr(&mut self, am: AddressingMode) -> u8 {
+        self.and(am.clone());
+        self.ror(AddressingMode::Accumulator);
+
+        match am {
+            AddressingMode::Immediate => 2,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Sets X to {(A AND X) - #value without borrow}, and updates NZC. One might use TXA AXS
+    /// #-element_size to iterate through an array of structures or other elements larger than a
+    /// byte, where the 6502 architecture usually prefers a structure of arrays. For example, TXA
+    /// AXS #$FC could step to the next OAM entry or to the next APU channel, saving one byte and
+    /// four cycles over four INXs. Also called SBX.
+    fn axs(&mut self, am: AddressingMode) -> u8 {
+        unimplemented!();
+
+        match am {
+            AddressingMode::Immediate => 2,
+            _ => unreachable!(),
         }
     }
 }
@@ -1248,13 +1350,13 @@ impl CPU {
     ///  absolute,X    ROR oper,X    7E    3     7
     fn ror(&mut self, am: AddressingMode) -> u8 {
         let val = am.load(self);
-        let lsb = val & 0x01;
+        let new_carry = val & 0x01;
         let c = self.reg.get_flag(Flag::C);
         let c = if c { 0x80 } else { 0x00 };
         let res = (val >> 1) | c;
         am.debump(self);
         am.store(self, res);
-        self.reg.set_flag(Flag::C, lsb == 0x01);
+        self.reg.set_flag(Flag::C, new_carry == 0x01);
         self.set_zn(res);
 
         match am {

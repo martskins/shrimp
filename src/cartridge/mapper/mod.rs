@@ -11,8 +11,6 @@ pub trait Mapper {
         let hi = self.readb(addr) as u16;
         (hi << 8) | lo
     }
-
-    fn chr_at(&self, _: usize) -> &[u8];
 }
 
 pub struct Header {

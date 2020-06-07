@@ -120,6 +120,10 @@ impl super::Mapper for Mapper {
     fn readb(&self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x1FFF => {
+                if self.chr_rom.is_empty() {
+                    return 0;
+                }
+
                 let bank_offset = self.chr_bank_1 * 0x2000;
                 self.chr_rom[bank_offset + addr as usize]
             }
@@ -134,14 +138,6 @@ impl super::Mapper for Mapper {
             }
             _ => unimplemented!("cMMC1 read"),
         }
-    }
-
-    fn chr_at(&self, pos: usize) -> &[u8] {
-        if self.chr_rom.is_empty() {
-            return &[];
-        }
-
-        &self.chr_rom[pos * 16..(pos + 1) * 16]
     }
 }
 

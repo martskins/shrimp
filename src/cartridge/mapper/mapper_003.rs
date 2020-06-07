@@ -51,8 +51,4 @@ impl super::Mapper for Mapper {
             _ => unimplemented!("cnrom read {:X}", addr),
         }
     }
-
-    fn chr_at(&self, pos: usize) -> &[u8] {
-        &self.chr_rom[pos * 16..(pos + 1) * 16]
-    }
 }

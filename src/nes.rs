@@ -14,18 +14,23 @@ pub const SCREEN_HEIGHT: usize = 240;
 pub struct NES {
     cpu: CPU,
     ppu: Rc<RefCell<PPU>>,
+    scale: u8,
 }
 
 impl NES {
-    pub fn new(path: impl AsRef<str>) -> Self {
-        let cartridge = Cartridge::from_path(path.as_ref()).unwrap();
+    pub fn new(opts: super::Options) -> Self {
+        let cartridge = Cartridge::from_path(opts.rom.as_str()).unwrap();
         let cartridge = Rc::new(RefCell::new(cartridge));
 
         let ppu = PPU::new(cartridge.clone());
         let ppu = Rc::new(RefCell::new(ppu));
 
         let cpu = CPU::new(cartridge, ppu.clone());
-        Self { cpu, ppu }
+        Self {
+            cpu,
+            ppu,
+            scale: opts.scale,
+        }
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -33,7 +38,11 @@ impl NES {
         let video_subsystem: sdl2::VideoSubsystem = sdl_context.video()?;
 
         let window = video_subsystem
-            .window("CLITONES", SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
+            .window(
+                "NEMU",
+                SCREEN_WIDTH as u32 * self.scale as u32,
+                SCREEN_HEIGHT as u32 * self.scale as u32,
+            )
             .opengl()
             .build()?;
 
@@ -65,16 +74,16 @@ impl NES {
 
             while let Some(event) = event_pump.poll_event() {
                 match event {
-                    Event::KeyDown {
-                        keycode: Some(Keycode::Return),
-                        ..
-                    } => ppu.set_vblank(true),
-                    Event::KeyDown {
-                        keycode: Some(Keycode::R),
-                        ..
-                    } => {
-                        self.cpu.reset();
-                    }
+                    // Event::KeyDown {
+                    //     keycode: Some(Keycode::Return),
+                    //     ..
+                    // } => ppu.set_vblank(true),
+                    // Event::KeyDown {
+                    //     keycode: Some(Keycode::R),
+                    //     ..
+                    // } => {
+                    //     self.cpu.reset();
+                    // }
                     Event::Quit { .. }
                     | Event::KeyDown {
                         keycode: Some(Keycode::Escape),

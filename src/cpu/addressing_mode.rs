@@ -1,6 +1,6 @@
 use crate::cpu::CPU;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) enum AddressingMode {
     Implied,
     Accumulator,

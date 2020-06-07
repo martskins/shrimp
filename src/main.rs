@@ -4,9 +4,18 @@ mod nes;
 mod ppu;
 
 use nes::NES;
+use structopt::StructOpt;
+
+#[derive(StructOpt)]
+pub struct Options {
+    #[structopt(short = "r", long)]
+    rom: String,
+    #[structopt(short = "s", long, default_value = "1")]
+    scale: u8,
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path: String = std::env::args().skip(1).take(1).collect();
-    let mut nes = NES::new(path);
+    let opts = Options::from_args();
+    let mut nes = NES::new(opts);
     nes.run()
 }

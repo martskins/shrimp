@@ -15,3 +15,4 @@ debug = []
 [dependencies]
 sdl2 = { version = "0.34.0" }   # SDL2 bindings for Rust
 gl = "0.14.0"                   # OpenGL bindings
+structopt = "0.3.14"            # Parse command line argument by defining a struct.
