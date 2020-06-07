@@ -283,14 +283,14 @@ impl CPU {
         cycles
     }
 
-    /// loads the byte at the program counter and advances the program counter.
+    // loads the byte at the program counter and advances the program counter.
     fn loadb_bump(&mut self) -> u8 {
         let opcode = self.readb(self.reg.pc);
         self.reg.pc += 1;
         opcode
     }
 
-    /// loads the word at the program counter and advances the program counter.
+    // loads the word at the program counter and advances the program counter.
     fn loadw_bump(&mut self) -> u16 {
         let lo = self.loadb_bump() as u16;
         let hi = self.loadb_bump() as u16;
@@ -356,14 +356,14 @@ impl CPU {
     }
 }
 
-/// CPU unofficial opcodes
+// CPU unofficial opcodes
 impl CPU {
-    /// Reads from memory at the specified address and ignores the value. Affects no register nor
-    /// flags. The absolute version can be used to increment PPUADDR or reset the PPUSTATUS latch
-    /// as an alternative to BIT. The zero page version has no side effects.  IGN d,X reads from
-    /// both d and (d+X)&255. IGN a,X additionally reads from a+X-256 it crosses a page boundary
-    /// (i.e. if ((a & 255) + X) > 255) Sometimes called TOP (triple-byte no-op), SKW (skip word),
-    /// DOP (double-byte no-op), or SKB (skip byte).
+    // Reads from memory at the specified address and ignores the value. Affects no register nor
+    // flags. The absolute version can be used to increment PPUADDR or reset the PPUSTATUS latch
+    // as an alternative to BIT. The zero page version has no side effects.  IGN d,X reads from
+    // both d and (d+X)&255. IGN a,X additionally reads from a+X-256 it crosses a page boundary
+    // (i.e. if ((a & 255) + X) > 255) Sometimes called TOP (triple-byte no-op), SKW (skip word),
+    // DOP (double-byte no-op), or SKB (skip byte).
     fn ign(&mut self, am: AddressingMode) -> u8 {
         let _ = am.load(self);
 
@@ -376,12 +376,12 @@ impl CPU {
         }
     }
 
-    /// These unofficial opcodes just read an immediate byte and skip it, like a different address
-    /// mode of NOP. One of these even works almost the same way on 65C02, HuC6280, and 65C816: BIT
-    /// #i ($89 ii), whose only difference from the 6502 is that it affects the NVZ flags like the
-    /// other BIT instructions. Use this SKB if you want your code to be portable to Lynx, TG16, or
-    /// Super NES. Puzznic uses $89, and Beauty and the Beast uses $80. Also called DOP, NOP
-    /// (distinguished from the 1-byte encoding by the addressing mode).
+    // These unofficial opcodes just read an immediate byte and skip it, like a different address
+    // mode of NOP. One of these even works almost the same way on 65C02, HuC6280, and 65C816: BIT
+    // #i ($89 ii), whose only difference from the 6502 is that it affects the NVZ flags like the
+    // other BIT instructions. Use this SKB if you want your code to be portable to Lynx, TG16, or
+    // Super NES. Puzznic uses $89, and Beauty and the Beast uses $80. Also called DOP, NOP
+    // (distinguished from the 1-byte encoding by the addressing mode).
     fn skb(&mut self, am: AddressingMode) -> u8 {
         let _ = am.load(self);
 
@@ -391,9 +391,9 @@ impl CPU {
         }
     }
 
-    /// Equivalent to AND #i then LSR A. Some sources call this "ASR"; we do not follow this out of
-    /// confusion with the mnemonic for a pseudoinstruction that combines CMP #$80 (or ANC #$FF)
-    /// then ROR. Note that ALR #$FE acts like LSR followed by CLC.
+    // Equivalent to AND #i then LSR A. Some sources call this "ASR"; we do not follow this out of
+    // confusion with the mnemonic for a pseudoinstruction that combines CMP #$80 (or ANC #$FF)
+    // then ROR. Note that ALR #$FE acts like LSR followed by CLC.
     fn alr(&mut self, am: AddressingMode) -> u8 {
         self.and(am.clone());
         self.lsr(AddressingMode::Accumulator);
@@ -404,9 +404,9 @@ impl CPU {
         }
     }
 
-    /// Does AND #i, setting N and Z flags based on the result. Then it copies N (bit 7) to C. ANC
-    /// #$FF could be useful for sign-extending, much like CMP #$80. ANC #$00 acts like LDA #$00
-    /// followed by CLC.
+    // Does AND #i, setting N and Z flags based on the result. Then it copies N (bit 7) to C. ANC
+    // #$FF could be useful for sign-extending, much like CMP #$80. ANC #$00 acts like LDA #$00
+    // followed by CLC.
     fn anc(&mut self, am: AddressingMode) -> u8 {
         self.and(am.clone());
         self.reg.set_flag(Flag::C, self.reg.get_flag(Flag::N));
@@ -417,9 +417,9 @@ impl CPU {
         }
     }
 
-    /// Similar to AND #i then ROR A, except sets the flags differently. N and Z are normal, but C
-    /// is bit 6 and V is bit 6 xor bit 5. A fast way to perform signed division by 4 is: CMP #$80;
-    /// ARR #$FF; ROR. This can be extended to larger powers of two.
+    // Similar to AND #i then ROR A, except sets the flags differently. N and Z are normal, but C
+    // is bit 6 and V is bit 6 xor bit 5. A fast way to perform signed division by 4 is: CMP #$80;
+    // ARR #$FF; ROR. This can be extended to larger powers of two.
     fn arr(&mut self, am: AddressingMode) -> u8 {
         self.and(am.clone());
         self.ror(AddressingMode::Accumulator);
@@ -430,11 +430,11 @@ impl CPU {
         }
     }
 
-    /// Sets X to {(A AND X) - #value without borrow}, and updates NZC. One might use TXA AXS
-    /// #-element_size to iterate through an array of structures or other elements larger than a
-    /// byte, where the 6502 architecture usually prefers a structure of arrays. For example, TXA
-    /// AXS #$FC could step to the next OAM entry or to the next APU channel, saving one byte and
-    /// four cycles over four INXs. Also called SBX.
+    // Sets X to {(A AND X) - #value without borrow}, and updates NZC. One might use TXA AXS
+    // #-element_size to iterate through an array of structures or other elements larger than a
+    // byte, where the 6502 architecture usually prefers a structure of arrays. For example, TXA
+    // AXS #$FC could step to the next OAM entry or to the next APU channel, saving one byte and
+    // four cycles over four INXs. Also called SBX.
     fn axs(&mut self, am: AddressingMode) -> u8 {
         unimplemented!();
 
@@ -445,23 +445,23 @@ impl CPU {
     }
 }
 
-/// CPU opcodes
-/// implemented as documented in https://www.masswerk.at/6502/6502_instruction_set.html
+// CPU opcodes
+// implemented as documented in https://www.masswerk.at/6502/6502_instruction_set.html
 impl CPU {
-    /// ADC  Add Memory to Accumulator with Carry
-    ///  A + M + C -> A, C                N Z C I D V
-    ///                                   + + + - - +
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  immediate     ADC #oper     69    2     2
-    ///  zeropage      ADC oper      65    2     3
-    ///  zeropage,X    ADC oper,X    75    2     4
-    ///  absolute      ADC oper      6D    3     4
-    ///  absolute,X    ADC oper,X    7D    3     4*
-    ///  absolute,Y    ADC oper,Y    79    3     4*
-    ///  (indirect,X)  ADC (oper,X)  61    2     6
-    ///  (indirect),Y  ADC (oper),Y  71    2     5*
+    // ADC  Add Memory to Accumulator with Carry
+    //  A + M + C -> A, C                N Z C I D V
+    //                                   + + + - - +
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  immediate     ADC #oper     69    2     2
+    //  zeropage      ADC oper      65    2     3
+    //  zeropage,X    ADC oper,X    75    2     4
+    //  absolute      ADC oper      6D    3     4
+    //  absolute,X    ADC oper,X    7D    3     4*
+    //  absolute,Y    ADC oper,Y    79    3     4*
+    //  (indirect,X)  ADC (oper,X)  61    2     6
+    //  (indirect),Y  ADC (oper),Y  71    2     5*
     fn adc(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         let acc = self.reg.a;
@@ -492,20 +492,20 @@ impl CPU {
         }
     }
 
-    /// AND  AND Memory with Accumulator
-    ///  A AND M -> A                     N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  immediate     AND #oper     29    2     2
-    ///  zeropage      AND oper      25    2     3
-    ///  zeropage,X    AND oper,X    35    2     4
-    ///  absolute      AND oper      2D    3     4
-    ///  absolute,X    AND oper,X    3D    3     4*
-    ///  absolute,Y    AND oper,Y    39    3     4*
-    ///  (indirect,X)  AND (oper,X)  21    2     6
-    ///  (indirect),Y  AND (oper),Y  31    2     5*
+    // AND  AND Memory with Accumulator
+    //  A AND M -> A                     N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  immediate     AND #oper     29    2     2
+    //  zeropage      AND oper      25    2     3
+    //  zeropage,X    AND oper,X    35    2     4
+    //  absolute      AND oper      2D    3     4
+    //  absolute,X    AND oper,X    3D    3     4*
+    //  absolute,Y    AND oper,Y    39    3     4*
+    //  (indirect,X)  AND (oper,X)  21    2     6
+    //  (indirect),Y  AND (oper),Y  31    2     5*
     fn and(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         let acc = self.reg.a;
@@ -526,17 +526,17 @@ impl CPU {
         }
     }
 
-    /// ASL  Shift Left One Bit (Memory or Accumulator)
-    ///  C <- [76543210] <- 0             N Z C I D V
-    ///                                   + + + - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  accumulator   ASL A         0A    1     2
-    ///  zeropage      ASL oper      06    2     5
-    ///  zeropage,X    ASL oper,X    16    2     6
-    ///  absolute      ASL oper      0E    3     6
-    ///  absolute,X    ASL oper,X    1E    3     7
+    // ASL  Shift Left One Bit (Memory or Accumulator)
+    //  C <- [76543210] <- 0             N Z C I D V
+    //                                   + + + - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  accumulator   ASL A         0A    1     2
+    //  zeropage      ASL oper      06    2     5
+    //  zeropage,X    ASL oper,X    16    2     6
+    //  absolute      ASL oper      0E    3     6
+    //  absolute,X    ASL oper,X    1E    3     7
     fn asl(&mut self, am: AddressingMode) -> u8 {
         let val = am.load(self);
         let res = (val as u16) << 1;
@@ -555,13 +555,13 @@ impl CPU {
         }
     }
 
-    /// BCC  Branch on Carry Clear
-    ///  branch on C = 0                  N Z C I D V
-    ///                                   - - - - - -
+    // BCC  Branch on Carry Clear
+    //  branch on C = 0                  N Z C I D V
+    //                                   - - - - - -
 
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  relative      BCC oper      90    2     2**
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  relative      BCC oper      90    2     2**
     fn bcc(&mut self, am: AddressingMode) -> u8 {
         let additional_cycles = self.branch_if(!self.reg.get_flag(Flag::C));
 
@@ -571,13 +571,13 @@ impl CPU {
         }
     }
 
-    /// BCS  Branch on Carry Set
-    ///  branch on C = 1                  N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  relative      BCS oper      B0    2     2**
+    // BCS  Branch on Carry Set
+    //  branch on C = 1                  N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  relative      BCS oper      B0    2     2**
     fn bcs(&mut self, am: AddressingMode) -> u8 {
         let additional_cycles = self.branch_if(self.reg.get_flag(Flag::C));
 
@@ -587,13 +587,13 @@ impl CPU {
         }
     }
 
-    /// BEQ  Branch on Result Zero
-    ///  branch on Z = 1                  N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  relative      BEQ oper      F0    2     2**
+    // BEQ  Branch on Result Zero
+    //  branch on Z = 1                  N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  relative      BEQ oper      F0    2     2**
     fn beq(&mut self, am: AddressingMode) -> u8 {
         let additional_cycles = self.branch_if(self.reg.get_flag(Flag::Z));
 
@@ -603,16 +603,16 @@ impl CPU {
         }
     }
 
-    /// BIT  Test Bits in Memory with Accumulator
-    ///  bits 7 and 6 of operand are transfered to bit 7 and 6 of SR (N,V);
-    ///  the zeroflag is set to the result of operand AND accumulator.
-    ///
-    ///  A AND M, M7 -> N, M6 -> V        N Z C I D V
-    ///                                  M7 + - - - M6
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  zeropage      BIT oper      24    2     3
-    ///  absolute      BIT oper      2C    3     4
+    // BIT  Test Bits in Memory with Accumulator
+    //  bits 7 and 6 of operand are transfered to bit 7 and 6 of SR (N,V);
+    //  the zeroflag is set to the result of operand AND accumulator.
+    //
+    //  A AND M, M7 -> N, M6 -> V        N Z C I D V
+    //                                  M7 + - - - M6
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  zeropage      BIT oper      24    2     3
+    //  absolute      BIT oper      2C    3     4
     fn bit(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         self.reg.set_flag(Flag::N, 0x80 & mem == 0x80);
@@ -626,13 +626,13 @@ impl CPU {
         }
     }
 
-    /// BMI  Branch on Result Minus
-    ///  branch on N = 1                  N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  relative      BMI oper      30    2     2**
+    // BMI  Branch on Result Minus
+    //  branch on N = 1                  N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  relative      BMI oper      30    2     2**
     fn bmi(&mut self, am: AddressingMode) -> u8 {
         let additional_cycles = self.branch_if(self.reg.get_flag(Flag::N));
 
@@ -642,13 +642,13 @@ impl CPU {
         }
     }
 
-    /// BNE  Branch on Result not Zero
-    ///  branch on Z = 0                  N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  relative      BNE oper      D0    2     2**
+    // BNE  Branch on Result not Zero
+    //  branch on Z = 0                  N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  relative      BNE oper      D0    2     2**
     fn bne(&mut self, am: AddressingMode) -> u8 {
         let additional_cycles = self.branch_if(!self.reg.get_flag(Flag::Z));
 
@@ -658,13 +658,13 @@ impl CPU {
         }
     }
 
-    /// BPL  Branch on Result Plus
-    ///  branch on N = 0                  N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  relative      BPL oper      10    2     2**
+    // BPL  Branch on Result Plus
+    //  branch on N = 0                  N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  relative      BPL oper      10    2     2**
     fn bpl(&mut self, am: AddressingMode) -> u8 {
         let additional_cycles = self.branch_if(!self.reg.get_flag(Flag::N));
 
@@ -674,13 +674,13 @@ impl CPU {
         }
     }
 
-    /// BRK  Force Break
-    ///  interrupt,                       N Z C I D V
-    ///  push PC+2, push SR               - - - 1 - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       BRK           00    1     7
+    // BRK  Force Break
+    //  interrupt,                       N Z C I D V
+    //  push PC+2, push SR               - - - 1 - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       BRK           00    1     7
     fn brk(&mut self, am: AddressingMode) -> u8 {
         let pc = self.reg.pc;
         self.pushw(pc + 1);
@@ -695,13 +695,13 @@ impl CPU {
         }
     }
 
-    /// BVC  Branch on Overflow Clear
-    ///  branch on V = 0                  N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  relative      BVC oper      50    2     2**
+    // BVC  Branch on Overflow Clear
+    //  branch on V = 0                  N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  relative      BVC oper      50    2     2**
     fn bvc(&mut self, am: AddressingMode) -> u8 {
         let additional_cycles = self.branch_if(!self.reg.get_flag(Flag::V));
 
@@ -711,13 +711,13 @@ impl CPU {
         }
     }
 
-    /// BVS  Branch on Overflow Set
-    ///  branch on V = 1                  N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  relative      BVC oper      70    2     2**
+    // BVS  Branch on Overflow Set
+    //  branch on V = 1                  N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  relative      BVC oper      70    2     2**
     fn bvs(&mut self, am: AddressingMode) -> u8 {
         let additional_cycles = self.branch_if(self.reg.get_flag(Flag::V));
 
@@ -727,13 +727,13 @@ impl CPU {
         }
     }
 
-    /// CLC  Clear Carry Flag
-    ///  0 -> C                           N Z C I D V
-    ///                                   - - 0 - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       CLC           18    1     2
+    // CLC  Clear Carry Flag
+    //  0 -> C                           N Z C I D V
+    //                                   - - 0 - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       CLC           18    1     2
     fn clc(&mut self, am: AddressingMode) -> u8 {
         self.reg.set_flag(Flag::C, false);
 
@@ -743,13 +743,13 @@ impl CPU {
         }
     }
 
-    /// CLD  Clear Decimal Mode
-    ///  0 -> D                           N Z C I D V
-    ///                                   - - - - 0 -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       CLD           D8    1     2
+    // CLD  Clear Decimal Mode
+    //  0 -> D                           N Z C I D V
+    //                                   - - - - 0 -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       CLD           D8    1     2
     fn cld(&mut self, am: AddressingMode) -> u8 {
         self.reg.set_flag(Flag::D, false);
 
@@ -759,13 +759,13 @@ impl CPU {
         }
     }
 
-    /// CLI  Clear Interrupt Disable Bit
-    ///  0 -> I                           N Z C I D V
-    ///                                   - - - 0 - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       CLI           58    1     2
+    // CLI  Clear Interrupt Disable Bit
+    //  0 -> I                           N Z C I D V
+    //                                   - - - 0 - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       CLI           58    1     2
     fn cli(&mut self, am: AddressingMode) -> u8 {
         self.reg.set_flag(Flag::I, false);
 
@@ -775,13 +775,13 @@ impl CPU {
         }
     }
 
-    /// CLV  Clear Overflow Flag
-    ///  0 -> V                           N Z C I D V
-    ///                                   - - - - - 0
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       CLV           B8    1     2
+    // CLV  Clear Overflow Flag
+    //  0 -> V                           N Z C I D V
+    //                                   - - - - - 0
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       CLV           B8    1     2
     fn clv(&mut self, am: AddressingMode) -> u8 {
         self.reg.set_flag(Flag::V, false);
 
@@ -791,20 +791,20 @@ impl CPU {
         }
     }
 
-    /// CMP  Compare Memory with Accumulator
-    ///  A - M                          N Z C I D V
-    ///                                 + + + - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  immediate     CMP #oper     C9    2     2
-    ///  zeropage      CMP oper      C5    2     3
-    ///  zeropage,X    CMP oper,X    D5    2     4
-    ///  absolute      CMP oper      CD    3     4
-    ///  absolute,X    CMP oper,X    DD    3     4*
-    ///  absolute,Y    CMP oper,Y    D9    3     4*
-    ///  (indirect,X)  CMP (oper,X)  C1    2     6
-    ///  (indirect),Y  CMP (oper),Y  D1    2     5*
+    // CMP  Compare Memory with Accumulator
+    //  A - M                          N Z C I D V
+    //                                 + + + - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  immediate     CMP #oper     C9    2     2
+    //  zeropage      CMP oper      C5    2     3
+    //  zeropage,X    CMP oper,X    D5    2     4
+    //  absolute      CMP oper      CD    3     4
+    //  absolute,X    CMP oper,X    DD    3     4*
+    //  absolute,Y    CMP oper,Y    D9    3     4*
+    //  (indirect,X)  CMP (oper,X)  C1    2     6
+    //  (indirect),Y  CMP (oper),Y  D1    2     5*
     fn cmp(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         self.compare(self.reg.a, mem);
@@ -822,15 +822,15 @@ impl CPU {
         }
     }
 
-    /// CPX  Compare Memory and Index X
-    ///  X - M                            N Z C I D V
-    ///                                   + + + - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  immediate     CPX #oper     E0    2     2
-    ///  zeropage      CPX oper      E4    2     3
-    ///  absolute      CPX oper      EC    3     4
+    // CPX  Compare Memory and Index X
+    //  X - M                            N Z C I D V
+    //                                   + + + - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  immediate     CPX #oper     E0    2     2
+    //  zeropage      CPX oper      E4    2     3
+    //  absolute      CPX oper      EC    3     4
     fn cpx(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         self.compare(self.reg.x, mem);
@@ -843,15 +843,15 @@ impl CPU {
         }
     }
 
-    /// CPY  Compare Memory and Index Y
-    ///  Y - M                            N Z C I D V
-    ///                                   + + + - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  immediate     CPY #oper     C0    2     2
-    ///  zeropage      CPY oper      C4    2     3
-    ///  absolute      CPY oper      CC    3     4
+    // CPY  Compare Memory and Index Y
+    //  Y - M                            N Z C I D V
+    //                                   + + + - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  immediate     CPY #oper     C0    2     2
+    //  zeropage      CPY oper      C4    2     3
+    //  absolute      CPY oper      CC    3     4
     fn cpy(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         self.compare(self.reg.y, mem);
@@ -864,16 +864,16 @@ impl CPU {
         }
     }
 
-    /// DEC  Decrement Memory by One
-    ///  M - 1 -> M                       N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  zeropage      DEC oper      C6    2     5
-    ///  zeropage,X    DEC oper,X    D6    2     6
-    ///  absolute      DEC oper      CE    3     6
-    ///  absolute,X    DEC oper,X    DE    3     7
+    // DEC  Decrement Memory by One
+    //  M - 1 -> M                       N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  zeropage      DEC oper      C6    2     5
+    //  zeropage,X    DEC oper,X    D6    2     6
+    //  absolute      DEC oper      CE    3     6
+    //  absolute,X    DEC oper,X    DE    3     7
     fn dec(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         let res = mem.wrapping_sub(1);
@@ -890,13 +890,13 @@ impl CPU {
         }
     }
 
-    /// DEX  Decrement Index X by One
-    ///  X - 1 -> X                       N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       DEC           CA    1     2
+    // DEX  Decrement Index X by One
+    //  X - 1 -> X                       N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       DEC           CA    1     2
     fn dex(&mut self, am: AddressingMode) -> u8 {
         let x = self.reg.x;
         let res = x.wrapping_sub(1);
@@ -909,13 +909,13 @@ impl CPU {
         }
     }
 
-    /// DEY  Decrement Index Y by One
-    ///  Y - 1 -> Y                       N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       DEC           88    1     2
+    // DEY  Decrement Index Y by One
+    //  Y - 1 -> Y                       N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       DEC           88    1     2
     fn dey(&mut self, am: AddressingMode) -> u8 {
         let y = self.reg.y;
         let res = y.wrapping_sub(1);
@@ -928,20 +928,20 @@ impl CPU {
         }
     }
 
-    /// EOR  Exclusive-OR Memory with Accumulator
-    ///  A EOR M -> A                     N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  immediate     EOR #oper     49    2     2
-    ///  zeropage      EOR oper      45    2     3
-    ///  zeropage,X    EOR oper,X    55    2     4
-    ///  absolute      EOR oper      4D    3     4
-    ///  absolute,X    EOR oper,X    5D    3     4*
-    ///  absolute,Y    EOR oper,Y    59    3     4*
-    ///  (indirect,X)  EOR (oper,X)  41    2     6
-    ///  (indirect),Y  EOR (oper),Y  51    2     5*
+    // EOR  Exclusive-OR Memory with Accumulator
+    //  A EOR M -> A                     N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  immediate     EOR #oper     49    2     2
+    //  zeropage      EOR oper      45    2     3
+    //  zeropage,X    EOR oper,X    55    2     4
+    //  absolute      EOR oper      4D    3     4
+    //  absolute,X    EOR oper,X    5D    3     4*
+    //  absolute,Y    EOR oper,Y    59    3     4*
+    //  (indirect,X)  EOR (oper,X)  41    2     6
+    //  (indirect),Y  EOR (oper),Y  51    2     5*
     fn eor(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         let acc = self.reg.a;
@@ -962,16 +962,16 @@ impl CPU {
         }
     }
 
-    /// INC  Increment Memory by One
-    ///  M + 1 -> M                       N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  zeropage      INC oper      E6    2     5
-    ///  zeropage,X    INC oper,X    F6    2     6
-    ///  absolute      INC oper      EE    3     6
-    ///  absolute,X    INC oper,X    FE    3     7
+    // INC  Increment Memory by One
+    //  M + 1 -> M                       N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  zeropage      INC oper      E6    2     5
+    //  zeropage,X    INC oper,X    F6    2     6
+    //  absolute      INC oper      EE    3     6
+    //  absolute,X    INC oper,X    FE    3     7
     fn inc(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         let res = mem.wrapping_add(1);
@@ -988,13 +988,13 @@ impl CPU {
         }
     }
 
-    /// INX  Increment Index X by One
-    ///  X + 1 -> X                       N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       INX           E8    1     2
+    // INX  Increment Index X by One
+    //  X + 1 -> X                       N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       INX           E8    1     2
     fn inx(&mut self, am: AddressingMode) -> u8 {
         let reg = self.reg.x;
         let res = reg.wrapping_add(1);
@@ -1007,13 +1007,13 @@ impl CPU {
         }
     }
 
-    /// INY  Increment Index Y by One
-    ///  Y + 1 -> Y                       N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       INY           C8    1     2
+    // INY  Increment Index Y by One
+    //  Y + 1 -> Y                       N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       INY           C8    1     2
     fn iny(&mut self, am: AddressingMode) -> u8 {
         let reg = self.reg.y;
         let res = reg.wrapping_add(1);
@@ -1026,14 +1026,14 @@ impl CPU {
         }
     }
 
-    /// JMP  Jump to New Location
-    ///  (PC+1) -> PCL                    N Z C I D V
-    ///  (PC+2) -> PCH                    - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  absolute      JMP oper      4C    3     3
-    ///  indirect      JMP (oper)    6C    3     5
+    // JMP  Jump to New Location
+    //  (PC+1) -> PCL                    N Z C I D V
+    //  (PC+2) -> PCH                    - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  absolute      JMP oper      4C    3     3
+    //  indirect      JMP (oper)    6C    3     5
     fn jmp(&mut self, am: AddressingMode) -> u8 {
         let res = self.loadw_bump();
         match am {
@@ -1054,14 +1054,14 @@ impl CPU {
         }
     }
 
-    /// JSR  Jump to New Location Saving Return Address
-    ///  push (PC+2),                     N Z C I D V
-    ///  (PC+1) -> PCL                    - - - - - -
-    ///  (PC+2) -> PCH
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  absolute      JSR oper      20    3     6
+    // JSR  Jump to New Location Saving Return Address
+    //  push (PC+2),                     N Z C I D V
+    //  (PC+1) -> PCL                    - - - - - -
+    //  (PC+2) -> PCH
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  absolute      JSR oper      20    3     6
     fn jsr(&mut self, am: AddressingMode) -> u8 {
         let res = self.loadw_bump();
         let pc = self.reg.pc;
@@ -1074,20 +1074,20 @@ impl CPU {
         }
     }
 
-    /// LDA  Load Accumulator with Memory
-    ///  M -> A                           N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  immediate     LDA #oper     A9    2     2
-    ///  zeropage      LDA oper      A5    2     3
-    ///  zeropage,X    LDA oper,X    B5    2     4
-    ///  absolute      LDA oper      AD    3     4
-    ///  absolute,X    LDA oper,X    BD    3     4*
-    ///  absolute,Y    LDA oper,Y    B9    3     4*
-    ///  (indirect,X)  LDA (oper,X)  A1    2     6
-    ///  (indirect),Y  LDA (oper),Y  B1    2     5*
+    // LDA  Load Accumulator with Memory
+    //  M -> A                           N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  immediate     LDA #oper     A9    2     2
+    //  zeropage      LDA oper      A5    2     3
+    //  zeropage,X    LDA oper,X    B5    2     4
+    //  absolute      LDA oper      AD    3     4
+    //  absolute,X    LDA oper,X    BD    3     4*
+    //  absolute,Y    LDA oper,Y    B9    3     4*
+    //  (indirect,X)  LDA (oper,X)  A1    2     6
+    //  (indirect),Y  LDA (oper),Y  B1    2     5*
     fn lda(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         self.reg.a = mem;
@@ -1106,17 +1106,17 @@ impl CPU {
         }
     }
 
-    /// LDX  Load Index X with Memory
-    ///  M -> X                           N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  immediate     LDX #oper     A2    2     2
-    ///  zeropage      LDX oper      A6    2     3
-    ///  zeropage,Y    LDX oper,Y    B6    2     4
-    ///  absolute      LDX oper      AE    3     4
-    ///  absolute,Y    LDX oper,Y    BE    3     4*
+    // LDX  Load Index X with Memory
+    //  M -> X                           N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  immediate     LDX #oper     A2    2     2
+    //  zeropage      LDX oper      A6    2     3
+    //  zeropage,Y    LDX oper,Y    B6    2     4
+    //  absolute      LDX oper      AE    3     4
+    //  absolute,Y    LDX oper,Y    BE    3     4*
     fn ldx(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         self.reg.x = mem;
@@ -1132,17 +1132,17 @@ impl CPU {
         }
     }
 
-    /// LDY  Load Index Y with Memory
-    ///  M -> Y                           N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  immediate     LDY #oper     A0    2     2
-    ///  zeropage      LDY oper      A4    2     3
-    ///  zeropage,X    LDY oper,X    B4    2     4
-    ///  absolute      LDY oper      AC    3     4
-    ///  absolute,X    LDY oper,X    BC    3     4*
+    // LDY  Load Index Y with Memory
+    //  M -> Y                           N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  immediate     LDY #oper     A0    2     2
+    //  zeropage      LDY oper      A4    2     3
+    //  zeropage,X    LDY oper,X    B4    2     4
+    //  absolute      LDY oper      AC    3     4
+    //  absolute,X    LDY oper,X    BC    3     4*
     fn ldy(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         self.reg.y = mem;
@@ -1158,17 +1158,17 @@ impl CPU {
         }
     }
 
-    /// LSR  Shift One Bit Right (Memory or Accumulator)
-    ///  0 -> [76543210] -> C             N Z C I D V
-    ///                                   0 + + - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  accumulator   LSR A         4A    1     2
-    ///  zeropage      LSR oper      46    2     5
-    ///  zeropage,X    LSR oper,X    56    2     6
-    ///  absolute      LSR oper      4E    3     6
-    ///  absolute,X    LSR oper,X    5E    3     7
+    // LSR  Shift One Bit Right (Memory or Accumulator)
+    //  0 -> [76543210] -> C             N Z C I D V
+    //                                   0 + + - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  accumulator   LSR A         4A    1     2
+    //  zeropage      LSR oper      46    2     5
+    //  zeropage,X    LSR oper,X    56    2     6
+    //  absolute      LSR oper      4E    3     6
+    //  absolute,X    LSR oper,X    5E    3     7
     fn lsr(&mut self, am: AddressingMode) -> u8 {
         let val = am.load(self);
         let c = val & 0x01;
@@ -1188,13 +1188,13 @@ impl CPU {
         }
     }
 
-    /// NOP  No Operation
-    ///  ---                              N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       NOP           EA    1     2
+    // NOP  No Operation
+    //  ---                              N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       NOP           EA    1     2
     fn nop(&mut self, am: AddressingMode) -> u8 {
         match am {
             AddressingMode::Implied => 2,
@@ -1202,20 +1202,20 @@ impl CPU {
         }
     }
 
-    /// ORA  OR Memory with Accumulator
-    ///  A OR M -> A                      N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  immediate     ORA #oper     09    2     2
-    ///  zeropage      ORA oper      05    2     3
-    ///  zeropage,X    ORA oper,X    15    2     4
-    ///  absolute      ORA oper      0D    3     4
-    ///  absolute,X    ORA oper,X    1D    3     4*
-    ///  absolute,Y    ORA oper,Y    19    3     4*
-    ///  (indirect,X)  ORA (oper,X)  01    2     6
-    ///  (indirect),Y  ORA (oper),Y  11    2     5*
+    // ORA  OR Memory with Accumulator
+    //  A OR M -> A                      N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  immediate     ORA #oper     09    2     2
+    //  zeropage      ORA oper      05    2     3
+    //  zeropage,X    ORA oper,X    15    2     4
+    //  absolute      ORA oper      0D    3     4
+    //  absolute,X    ORA oper,X    1D    3     4*
+    //  absolute,Y    ORA oper,Y    19    3     4*
+    //  (indirect,X)  ORA (oper,X)  01    2     6
+    //  (indirect),Y  ORA (oper),Y  11    2     5*
     fn ora(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         let acc = self.reg.a;
@@ -1236,13 +1236,13 @@ impl CPU {
         }
     }
 
-    /// PHA  Push Accumulator on Stack
-    ///  push A                           N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       PHA           48    1     3
+    // PHA  Push Accumulator on Stack
+    //  push A                           N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       PHA           48    1     3
     fn pha(&mut self, am: AddressingMode) -> u8 {
         let acc = self.reg.a;
         self.pushb(acc);
@@ -1253,13 +1253,13 @@ impl CPU {
         }
     }
 
-    /// PHP  Push Processor Status on Stack
-    ///  push SR                          N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       PHP           08    1     3
+    // PHP  Push Processor Status on Stack
+    //  push SR                          N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       PHP           08    1     3
     fn php(&mut self, am: AddressingMode) -> u8 {
         let sr = self.reg.p | 0b0011_0000;
         self.pushb(sr);
@@ -1270,13 +1270,13 @@ impl CPU {
         }
     }
 
-    /// PLA  Pull Accumulator from Stack
-    ///  pull A                           N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       PLA           68    1     4
+    // PLA  Pull Accumulator from Stack
+    //  pull A                           N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       PLA           68    1     4
     fn pla(&mut self, am: AddressingMode) -> u8 {
         let val = self.popb();
         self.reg.a = val;
@@ -1288,13 +1288,13 @@ impl CPU {
         }
     }
 
-    /// PLP  Pull Processor Status from Stack
-    ///  pull SR                          N Z C I D V
-    ///                                   from stack
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       PLP           28    1     4
+    // PLP  Pull Processor Status from Stack
+    //  pull SR                          N Z C I D V
+    //                                   from stack
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       PLP           28    1     4
     fn plp(&mut self, am: AddressingMode) -> u8 {
         let val = self.popb();
         self.set_p(val);
@@ -1305,17 +1305,17 @@ impl CPU {
         }
     }
 
-    /// ROL  Rotate One Bit Left (Memory or Accumulator)
-    ///  C <- [76543210] <- C             N Z C I D V
-    ///                                   + + + - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  accumulator   ROL A         2A    1     2
-    ///  zeropage      ROL oper      26    2     5
-    ///  zeropage,X    ROL oper,X    36    2     6
-    ///  absolute      ROL oper      2E    3     6
-    ///  absolute,X    ROL oper,X    3E    3     7
+    // ROL  Rotate One Bit Left (Memory or Accumulator)
+    //  C <- [76543210] <- C             N Z C I D V
+    //                                   + + + - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  accumulator   ROL A         2A    1     2
+    //  zeropage      ROL oper      26    2     5
+    //  zeropage,X    ROL oper,X    36    2     6
+    //  absolute      ROL oper      2E    3     6
+    //  absolute,X    ROL oper,X    3E    3     7
     fn rol(&mut self, am: AddressingMode) -> u8 {
         let val = am.load(self);
         let msb = val & 0x80;
@@ -1337,17 +1337,17 @@ impl CPU {
         }
     }
 
-    /// ROR  Rotate One Bit Right (Memory or Accumulator)
-    ///  C -> [76543210] -> C             N Z C I D V
-    ///                                   + + + - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  accumulator   ROR A         6A    1     2
-    ///  zeropage      ROR oper      66    2     5
-    ///  zeropage,X    ROR oper,X    76    2     6
-    ///  absolute      ROR oper      6E    3     6
-    ///  absolute,X    ROR oper,X    7E    3     7
+    // ROR  Rotate One Bit Right (Memory or Accumulator)
+    //  C -> [76543210] -> C             N Z C I D V
+    //                                   + + + - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  accumulator   ROR A         6A    1     2
+    //  zeropage      ROR oper      66    2     5
+    //  zeropage,X    ROR oper,X    76    2     6
+    //  absolute      ROR oper      6E    3     6
+    //  absolute,X    ROR oper,X    7E    3     7
     fn ror(&mut self, am: AddressingMode) -> u8 {
         let val = am.load(self);
         let new_carry = val & 0x01;
@@ -1369,13 +1369,13 @@ impl CPU {
         }
     }
 
-    /// RTI  Return from Interrupt
-    ///  pull SR, pull PC                 N Z C I D V
-    ///                                   from stack
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       RTI           40    1     6
+    // RTI  Return from Interrupt
+    //  pull SR, pull PC                 N Z C I D V
+    //                                   from stack
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       RTI           40    1     6
     fn rti(&mut self, am: AddressingMode) -> u8 {
         let sr = self.popb();
         self.set_p(sr);
@@ -1388,13 +1388,13 @@ impl CPU {
         }
     }
 
-    /// RTS  Return from Subroutine
-    ///  pull PC, PC+1 -> PC              N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       RTS           60    1     6
+    // RTS  Return from Subroutine
+    //  pull PC, PC+1 -> PC              N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       RTS           60    1     6
     fn rts(&mut self, am: AddressingMode) -> u8 {
         self.reg.pc = self.popw() + 1;
 
@@ -1404,20 +1404,20 @@ impl CPU {
         }
     }
 
-    /// SBC  Subtract Memory from Accumulator with Borrow
-    ///  A - M - C -> A                   N Z C I D V
-    ///                                   + + + - - +
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  immediate     SBC #oper     E9    2     2
-    ///  zeropage      SBC oper      E5    2     3
-    ///  zeropage,X    SBC oper,X    F5    2     4
-    ///  absolute      SBC oper      ED    3     4
-    ///  absolute,X    SBC oper,X    FD    3     4*
-    ///  absolute,Y    SBC oper,Y    F9    3     4*
-    ///  (indirect,X)  SBC (oper,X)  E1    2     6
-    ///  (indirect),Y  SBC (oper),Y  F1    2     5*
+    // SBC  Subtract Memory from Accumulator with Borrow
+    //  A - M - C -> A                   N Z C I D V
+    //                                   + + + - - +
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  immediate     SBC #oper     E9    2     2
+    //  zeropage      SBC oper      E5    2     3
+    //  zeropage,X    SBC oper,X    F5    2     4
+    //  absolute      SBC oper      ED    3     4
+    //  absolute,X    SBC oper,X    FD    3     4*
+    //  absolute,Y    SBC oper,Y    F9    3     4*
+    //  (indirect,X)  SBC (oper,X)  E1    2     6
+    //  (indirect),Y  SBC (oper),Y  F1    2     5*
     fn sbc(&mut self, am: AddressingMode) -> u8 {
         let mem = am.load(self);
         let acc = self.reg.a;
@@ -1446,13 +1446,13 @@ impl CPU {
         }
     }
 
-    /// SEC  Set Carry Flag
-    ///  1 -> C                           N Z C I D V
-    ///                                   - - 1 - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       SEC           38    1     2
+    // SEC  Set Carry Flag
+    //  1 -> C                           N Z C I D V
+    //                                   - - 1 - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       SEC           38    1     2
     fn sec(&mut self, am: AddressingMode) -> u8 {
         self.reg.set_flag(Flag::C, true);
 
@@ -1462,13 +1462,13 @@ impl CPU {
         }
     }
 
-    /// SED  Set Decimal Flag
-    ///  1 -> D                           N Z C I D V
-    ///                                   - - - - 1 -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       SED           F8    1     2
+    // SED  Set Decimal Flag
+    //  1 -> D                           N Z C I D V
+    //                                   - - - - 1 -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       SED           F8    1     2
     fn sed(&mut self, am: AddressingMode) -> u8 {
         self.reg.set_flag(Flag::D, true);
 
@@ -1478,13 +1478,13 @@ impl CPU {
         }
     }
 
-    /// SEI  Set Interrupt Disable Status
-    ///  1 -> I                           N Z C I D V
-    ///                                   - - - 1 - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       SEI           78    1     2
+    // SEI  Set Interrupt Disable Status
+    //  1 -> I                           N Z C I D V
+    //                                   - - - 1 - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       SEI           78    1     2
     fn sei(&mut self, am: AddressingMode) -> u8 {
         self.reg.set_flag(Flag::I, true);
 
@@ -1494,19 +1494,19 @@ impl CPU {
         }
     }
 
-    /// STA  Store Accumulator in Memory
-    ///  A -> M                           N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  zeropage      STA oper      85    2     3
-    ///  zeropage,X    STA oper,X    95    2     4
-    ///  absolute      STA oper      8D    3     4
-    ///  absolute,X    STA oper,X    9D    3     5
-    ///  absolute,Y    STA oper,Y    99    3     5
-    ///  (indirect,X)  STA (oper,X)  81    2     6
-    ///  (indirect),Y  STA (oper),Y  91    2     6
+    // STA  Store Accumulator in Memory
+    //  A -> M                           N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  zeropage      STA oper      85    2     3
+    //  zeropage,X    STA oper,X    95    2     4
+    //  absolute      STA oper      8D    3     4
+    //  absolute,X    STA oper,X    9D    3     5
+    //  absolute,Y    STA oper,Y    99    3     5
+    //  (indirect,X)  STA (oper,X)  81    2     6
+    //  (indirect),Y  STA (oper),Y  91    2     6
     fn sta(&mut self, am: AddressingMode) -> u8 {
         let acc = self.reg.a;
         am.store(self, acc);
@@ -1523,15 +1523,15 @@ impl CPU {
         }
     }
 
-    /// STX  Store Index X in Memory
-    ///  X -> M                           N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  zeropage      STX oper      86    2     3
-    ///  zeropage,Y    STX oper,Y    96    2     4
-    ///  absolute      STX oper      8E    3     4
+    // STX  Store Index X in Memory
+    //  X -> M                           N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  zeropage      STX oper      86    2     3
+    //  zeropage,Y    STX oper,Y    96    2     4
+    //  absolute      STX oper      8E    3     4
     fn stx(&mut self, am: AddressingMode) -> u8 {
         let reg = self.reg.x;
         am.store(self, reg);
@@ -1544,15 +1544,15 @@ impl CPU {
         }
     }
 
-    /// STY  Sore Index Y in Memory
-    ///  Y -> M                           N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  zeropage      STY oper      84    2     3
-    ///  zeropage,X    STY oper,X    94    2     4
-    ///  absolute      STY oper      8C    3     4
+    // STY  Sore Index Y in Memory
+    //  Y -> M                           N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  zeropage      STY oper      84    2     3
+    //  zeropage,X    STY oper,X    94    2     4
+    //  absolute      STY oper      8C    3     4
     fn sty(&mut self, am: AddressingMode) -> u8 {
         let reg = self.reg.y;
         am.store(self, reg);
@@ -1565,13 +1565,13 @@ impl CPU {
         }
     }
 
-    /// TAX  Transfer Accumulator to Index X
-    ///  A -> X                           N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       TAX           AA    1     2
+    // TAX  Transfer Accumulator to Index X
+    //  A -> X                           N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       TAX           AA    1     2
     fn tax(&mut self, am: AddressingMode) -> u8 {
         let acc = self.reg.a;
         self.reg.x = acc;
@@ -1583,13 +1583,13 @@ impl CPU {
         }
     }
 
-    /// TAY  Transfer Accumulator to Index Y
-    ///  A -> Y                           N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       TAY           A8    1     2
+    // TAY  Transfer Accumulator to Index Y
+    //  A -> Y                           N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       TAY           A8    1     2
     fn tay(&mut self, am: AddressingMode) -> u8 {
         let acc = self.reg.a;
         self.reg.y = acc;
@@ -1601,13 +1601,13 @@ impl CPU {
         }
     }
 
-    /// TSX  Transfer Stack Pointer to Index X
-    ///  SP -> X                          N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       TSX           BA    1     2
+    // TSX  Transfer Stack Pointer to Index X
+    //  SP -> X                          N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       TSX           BA    1     2
     fn tsx(&mut self, am: AddressingMode) -> u8 {
         let sp = self.reg.s;
         self.reg.x = sp;
@@ -1619,13 +1619,13 @@ impl CPU {
         }
     }
 
-    /// TXA  Transfer Index X to Accumulator
-    ///  X -> A                           N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       TXA           8A    1     2
+    // TXA  Transfer Index X to Accumulator
+    //  X -> A                           N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       TXA           8A    1     2
     fn txa(&mut self, am: AddressingMode) -> u8 {
         let reg = self.reg.x;
         self.reg.a = reg;
@@ -1637,13 +1637,13 @@ impl CPU {
         }
     }
 
-    /// TXS  Transfer Index X to Stack Register
-    ///  X -> SP                          N Z C I D V
-    ///                                   - - - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       TXS           9A    1     2
+    // TXS  Transfer Index X to Stack Register
+    //  X -> SP                          N Z C I D V
+    //                                   - - - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       TXS           9A    1     2
     fn txs(&mut self, am: AddressingMode) -> u8 {
         let reg = self.reg.x;
         self.reg.s = reg;
@@ -1654,13 +1654,13 @@ impl CPU {
         }
     }
 
-    /// TYA  Transfer Index Y to Accumulator
-    ///  Y -> A                           N Z C I D V
-    ///                                   + + - - - -
-    ///
-    ///  addressing    assembler    opc  bytes  cycles
-    ///  --------------------------------------------
-    ///  implied       TYA           98    1     2
+    // TYA  Transfer Index Y to Accumulator
+    //  Y -> A                           N Z C I D V
+    //                                   + + - - - -
+    //
+    //  addressing    assembler    opc  bytes  cycles
+    //  --------------------------------------------
+    //  implied       TYA           98    1     2
     fn tya(&mut self, am: AddressingMode) -> u8 {
         let reg = self.reg.y;
         self.reg.a = reg;
@@ -1703,7 +1703,7 @@ impl CPU {
         self.pushb(lo);
     }
 
-    /// performs a branch if the given condition is met.
+    // performs a branch if the given condition is met.
     fn branch_if(&mut self, cond: bool) -> u8 {
         let val = self.loadb_bump() as i8;
         let old_pc = self.reg.pc;
@@ -1723,7 +1723,7 @@ impl CPU {
         cycles
     }
 
-    /// performs x - y and set the appropiate flags.
+    // performs x - y and set the appropiate flags.
     fn compare(&mut self, x: u8, y: u8) {
         let res = (x as u16).wrapping_sub(y as u16);
         self.set_zn(res as u8);

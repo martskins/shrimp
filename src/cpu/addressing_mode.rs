@@ -18,9 +18,9 @@ pub(super) enum AddressingMode {
 }
 
 impl AddressingMode {
-    /// debump rolls back the program counter bump performed in the load operation of an
-    /// AddressingMode. This should be used in any instruction that uses both am.load and am.store
-    /// in the same block.
+    // debump rolls back the program counter bump performed in the load operation of an
+    // AddressingMode. This should be used in any instruction that uses both am.load and am.store
+    // in the same block.
     pub(super) fn debump(&self, cpu: &mut CPU) {
         match self {
             AddressingMode::Implied => {}

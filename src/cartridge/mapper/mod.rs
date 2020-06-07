@@ -14,9 +14,9 @@ pub trait Mapper {
 }
 
 pub struct Header {
-    /// prg rom size in 16kb units
+    // prg rom size in 16kb units
     prg_rom_size: usize,
-    /// chr rom size in 8kb units
+    // chr rom size in 8kb units
     chr_rom_size: usize,
     mapper: u8,
 }
