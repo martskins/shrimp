@@ -113,15 +113,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nesmulator"
-version = "0.1.0"
-dependencies = [
- "gl",
- "sdl2",
- "structopt",
-]
-
-[[package]]
 name = "proc-macro-error"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -185,6 +176,15 @@ checksum = "575db20c45cce6565d4ece46509288ded53f5571dc89e4af165a562eb0eeec26"
 dependencies = [
  "cfg-if",
  "libc",
+]
+
+[[package]]
+name = "shrimp"
+version = "0.1.0"
+dependencies = [
+ "gl",
+ "sdl2",
+ "structopt",
 ]
 
 [[package]]

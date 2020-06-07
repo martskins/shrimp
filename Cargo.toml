@@ -1,5 +1,5 @@
 [package]
-name = "nesmulator"
+name = "shrimp"
 version = "0.1.0"
 authors = ["Martin Asquino <martin.asquino@gmail.com>"]
 edition = "2018"

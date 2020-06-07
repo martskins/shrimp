@@ -21,11 +21,13 @@ pub struct Header {
     mapper: u8,
 }
 
-fn read_header(data: [u8; 16]) -> Header {
-    Header {
-        prg_rom_size: data[4] as usize,
-        chr_rom_size: data[5] as usize,
-        mapper: (data[7] & 0x80) | (data[6] >> 4),
+impl Header {
+    pub fn from_bytes(data: [u8; 16]) -> Self {
+        Header {
+            prg_rom_size: data[4] as usize,
+            chr_rom_size: data[5] as usize,
+            mapper: (data[7] & 0x80) | (data[6] >> 4),
+        }
     }
 }
 
@@ -33,7 +35,7 @@ pub fn from(data: Vec<u8>) -> Box<dyn Mapper> {
     let (header_data, data) = data.split_at(16);
     let mut header: [u8; 16] = [0; 16];
     header.copy_from_slice(&header_data[0..=15]);
-    let header = read_header(header);
+    let header = Header::from_bytes(header);
 
     #[cfg(feature = "debug")]
     println!("Detected mapper {}", header.mapper);

@@ -3,6 +3,7 @@ mod register;
 
 use crate::cartridge::Cartridge;
 use crate::cpu::addressing_mode::AddressingMode;
+use crate::joypad::Joypad;
 use crate::ppu::PPU;
 use register::{Flag, Registers};
 use std::cell::RefCell;
@@ -23,6 +24,8 @@ pub struct CPU {
     #[cfg(feature = "debug")]
     logger: std::fs::File,
     pub cycles: u64,
+    pub joypad_1: Joypad,
+    pub joypad_2: Joypad,
 }
 
 impl CPU {
@@ -38,6 +41,8 @@ impl CPU {
             #[cfg(feature = "debug")]
             logger: file,
             cycles: 7,
+            joypad_1: Joypad::default(),
+            joypad_2: Joypad::default(),
         };
         cpu.reset();
         cpu
@@ -64,7 +69,6 @@ impl CPU {
 
     pub fn reset(&mut self) {
         self.reg.pc = self.readw(RESET_VECTOR);
-        // self.reg.pc = 0xC000;
         self.reg.p = 0x24;
     }
 
@@ -302,7 +306,9 @@ impl CPU {
         match addr {
             0x0000..=0x1FFF => self.ram[addr as usize % 0x0800],
             0x2000..=0x3FFF => self.ppu.borrow_mut().read(addr % 0x08),
-            0x4000..=0x4017 => self.apu[addr as usize % 0x0018],
+            0x4000..=0x4015 => self.apu[addr as usize % 0x0018],
+            0x4016 => self.joypad_1.state() as u8,
+            0x4017 => self.joypad_2.state() as u8,
             0x4018..=0x401F => 0,
             0x4020..=0xFFFF => self.cartridge.borrow().read(addr),
         }
@@ -320,7 +326,7 @@ impl CPU {
         (hi << 8) | lo
     }
 
-    fn writeb(&mut self, addr: u16, val: u8) {
+    pub fn writeb(&mut self, addr: u16, val: u8) {
         if addr == 0x4014 {
             return self.dma(val);
         }
@@ -328,7 +334,8 @@ impl CPU {
         match addr {
             0x0000..=0x1FFF => self.ram[addr as usize % 0x0800] = val,
             0x2000..=0x3FFF => self.ppu.borrow_mut().write(addr % 0x08, val),
-            0x4000..=0x4017 => self.apu[addr as usize % 0x0018] = val,
+            0x4000..=0x4015 => self.apu[addr as usize % 0x0018] = val,
+            0x4016..=0x4017 => self.joypad_1.reset(),
             0x4018..=0x401F => {}
             0x4020..=0xFFFF => self.cartridge.borrow_mut().write(addr, val),
         }
@@ -1726,61 +1733,4 @@ impl CPU {
         self.set_zn(res as u8);
         self.reg.set_flag(Flag::C, x >= y);
     }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::cartridge::Cartridge;
-    use crate::cpu::CPU;
-    use crate::ppu::PPU;
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
-    #[test]
-    fn test_read() {
-        let mut data = [0; 0xFFFF];
-        data[0xFFFD % 0xBFE0] = 0x00;
-        data[0xFFFE % 0xBFE0] = 0x01;
-
-        let cart = Cartridge::from_data(data.to_vec());
-        let cart = Rc::new(RefCell::new(cart));
-        let ppu = PPU::new(cart.clone());
-        let ppu = Rc::new(RefCell::new(ppu));
-        let mut cpu = CPU::new(cart, ppu.clone());
-
-        let opcode = cpu.loadb_bump();
-        assert_eq!(0x00, opcode);
-        assert_eq!(0xFFFE, cpu.reg.pc);
-
-        let opcode = cpu.loadb_bump();
-        assert_eq!(0x01, opcode);
-        assert_eq!(0xFFFF, cpu.reg.pc);
-    }
-
-    #[test]
-    fn test_read_word() {
-        let mut data = [0; 0xFFFF];
-        data[0xFFFD % 0xBFE0] = 0x00;
-        data[0xFFFE % 0xBFE0] = 0x01;
-
-        let cart = Cartridge::from_data(data.to_vec());
-        let cart = Rc::new(RefCell::new(cart));
-        let ppu = PPU::new(cart.clone());
-        let ppu = Rc::new(RefCell::new(ppu));
-        let mut cpu = CPU::new(cart, ppu.clone());
-
-        let word = cpu.readw(0xFFFD);
-        assert_eq!(0x0100, word);
-    }
-}
-
-#[test]
-fn test_mirroring() {
-    assert_eq!(2, 0x2002 % 0x08);
-    assert_eq!(2, 0x200A % 0x08);
-    assert_eq!(2, 0x2012 % 0x08);
-
-    assert_eq!(0, 0x2000 % 0x08);
-    assert_eq!(0, 0x2008 % 0x08);
-    assert_eq!(0, 0x2010 % 0x08);
 }

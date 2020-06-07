@@ -1,5 +1,6 @@
 use crate::cartridge::Cartridge;
 use crate::cpu::CPU;
+use crate::joypad::Joypad;
 use crate::ppu::PPU;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -39,7 +40,7 @@ impl NES {
 
         let window = video_subsystem
             .window(
-                "NEMU",
+                "Shrimp",
                 SCREEN_WIDTH as u32 * self.scale as u32,
                 SCREEN_HEIGHT as u32 * self.scale as u32,
             )
@@ -70,30 +71,46 @@ impl NES {
                 canvas.clear();
                 canvas.copy(&texture, None, None)?;
                 canvas.present();
-            }
 
-            while let Some(event) = event_pump.poll_event() {
-                match event {
-                    // Event::KeyDown {
-                    //     keycode: Some(Keycode::Return),
-                    //     ..
-                    // } => ppu.set_vblank(true),
-                    // Event::KeyDown {
-                    //     keycode: Some(Keycode::R),
-                    //     ..
-                    // } => {
-                    //     self.cpu.reset();
-                    // }
-                    Event::Quit { .. }
-                    | Event::KeyDown {
-                        keycode: Some(Keycode::Escape),
-                        ..
-                    } => break 'running,
-                    _ => {}
+                while let Some(event) = event_pump.poll_event() {
+                    let c = &mut self.cpu.joypad_1;
+                    match event {
+                        Event::Quit { .. }
+                        | Event::KeyDown {
+                            keycode: Some(Keycode::Escape),
+                            ..
+                        } => break 'running,
+                        Event::KeyUp {
+                            keycode: Some(keycode),
+                            ..
+                        } => set_keys(c, keycode, false),
+                        Event::KeyDown {
+                            keycode: Some(keycode),
+                            ..
+                        } => set_keys(c, keycode, true),
+                        _ => {}
+                    }
                 }
+
+                // 60 FPS
+                std::thread::sleep(std::time::Duration::from_nanos(16000000));
             }
         }
 
         Ok(())
+    }
+}
+
+fn set_keys(c: &mut Joypad, keycode: Keycode, pressed: bool) {
+    match keycode {
+        Keycode::Return => c.start = pressed,
+        Keycode::LShift => c.select = pressed,
+        Keycode::X => c.a = pressed,
+        Keycode::Z => c.b = pressed,
+        Keycode::Up => c.up = pressed,
+        Keycode::Down => c.down = pressed,
+        Keycode::Left => c.left = pressed,
+        Keycode::Right => c.right = pressed,
+        _ => {}
     }
 }

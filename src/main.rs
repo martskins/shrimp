@@ -1,5 +1,6 @@
 mod cartridge;
 mod cpu;
+mod joypad;
 mod nes;
 mod ppu;
 
