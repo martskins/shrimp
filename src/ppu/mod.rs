@@ -26,6 +26,8 @@ static PALETTE: [u8; 192] = [
 ];
 
 const NTBL_BASE: u16 = 0x2000;
+const SPRITE_PALETTE_OFFSET: usize = 16;
+const PALETTE_BASE: usize = 0x3F00;
 
 #[derive(Default)]
 struct RGB {
@@ -295,13 +297,16 @@ impl PPU {
                 }
 
                 let palette_index = sprite.palette();
-                let color_idx = self.readb(0x3F00 + palette_index as u16 + color_idx) as usize;
-                let color_idx = color_idx & 0x3F;
+                let palette_addr = PALETTE_BASE
+                    + SPRITE_PALETTE_OFFSET
+                    + palette_index as usize
+                    + color_idx as usize;
+                let color_addr = self.readb(palette_addr as u16) as usize & 0x3F;
                 return Some(SpritePixel {
                     color: RGB {
-                        r: PALETTE[color_idx * 3],
-                        g: PALETTE[color_idx * 3 + 1],
-                        b: PALETTE[color_idx * 3 + 2],
+                        r: PALETTE[color_addr * 3],
+                        g: PALETTE[color_addr * 3 + 1],
+                        b: PALETTE[color_addr * 3 + 2],
                     },
                     priority: sprite.priority(),
                 });
@@ -345,12 +350,12 @@ impl PPU {
         let palette_index = palette_offset << 2;
         debug_assert!(palette_index as u16 | color_idx < 0x20);
 
-        let color_idx = self.readb(0x3F00 + palette_index as u16 + color_idx) as usize;
-        let color_idx = color_idx & 0x3F;
+        let palette_addr = PALETTE_BASE + palette_index as usize + color_idx as usize;
+        let color_addr = self.readb(palette_addr as u16) as usize & 0x3F;
         Some(RGB {
-            r: PALETTE[color_idx * 3],
-            g: PALETTE[color_idx * 3 + 1],
-            b: PALETTE[color_idx * 3 + 2],
+            r: PALETTE[color_addr * 3],
+            g: PALETTE[color_addr * 3 + 1],
+            b: PALETTE[color_addr * 3 + 2],
         })
     }
 
