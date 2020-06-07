@@ -1,14 +1,3 @@
-use super::RESET_VECTOR;
-
-pub enum Register {
-    A,
-    X,
-    Y,
-    PC,
-    S,
-    P,
-}
-
 #[derive(Debug)]
 pub struct Registers {
     pub a: u8,
@@ -33,28 +22,6 @@ impl Default for Registers {
 }
 
 impl Registers {
-    pub fn set_reg(&mut self, reg: Register, val: u8) {
-        match reg {
-            Register::A => self.a = val,
-            Register::X => self.x = val,
-            Register::Y => self.y = val,
-            Register::S => self.s = val,
-            // P => self.a = val,
-            _ => panic!("invalid use of set_reg"),
-        }
-    }
-
-    pub fn get_reg(&self, reg: Register) -> u8 {
-        match reg {
-            Register::A => self.a,
-            Register::X => self.x,
-            Register::Y => self.y,
-            Register::S => self.s,
-            // P => self.a = val,
-            _ => panic!("invalid use of set_reg"),
-        }
-    }
-
     pub fn set_flag(&mut self, flag: Flag, val: bool) {
         let sum = match flag {
             Flag::N => 0b1000_0000,
@@ -86,6 +53,7 @@ impl Registers {
     }
 }
 
+#[allow(unused)]
 pub enum Flag {
     N,
     V,

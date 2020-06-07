@@ -23,7 +23,8 @@ pub enum Register {
     PPUSCROLL, // 0x2005
     PPUADDR,   // 0x2006
     PPUDATA,   // 0x2007
-    OAMDMA,    // 0x2008
+    #[allow(unused)]
+    OAMDMA, // 0x2008
 }
 
 impl From<usize> for Register {

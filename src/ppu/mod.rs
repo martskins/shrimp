@@ -360,9 +360,9 @@ impl PPU {
         self.readb(NTBL_BASE + 0x3C0 + x + (y * 8))
     }
 
-    pub fn get_vblank(&mut self) -> bool {
-        self.ppustatus & 0x80 > 0
-    }
+    // pub fn get_vblank(&mut self) -> bool {
+    //     self.ppustatus & 0x80 > 0
+    // }
 
     pub fn set_vblank(&mut self, val: bool) {
         self.has_blanked = true;

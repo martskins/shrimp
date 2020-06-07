@@ -1,3 +1,4 @@
+#![allow(unused)]
 use super::Header;
 
 pub struct Mapper {
@@ -112,8 +113,11 @@ impl super::Mapper for Mapper {
                 print!("{}", val as char);
             }
             0x6000..=0x6003 => {}
+            0x6004..=0x7FFF => {
+                print!("{}", val as char);
+            }
             0x8000..=0xFFFF => self.write_shift_register(addr, val),
-            x => {} // x => panic!("write at {:X}", x),
+            _ => {}
         }
     }
 

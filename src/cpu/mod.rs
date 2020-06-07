@@ -50,6 +50,7 @@ impl CPU {
         self.reg.pc = self.readw(NMI_VECTOR);
     }
 
+    #[allow(unused)]
     pub fn irq(&mut self) {
         if self.reg.get_flag(Flag::I) {
             return;
@@ -329,10 +330,6 @@ impl CPU {
             0x2000..=0x3FFF => self.ppu.borrow_mut().write(addr % 0x08, val),
             0x4000..=0x4017 => self.apu[addr as usize % 0x0018] = val,
             0x4018..=0x401F => {}
-            0x6000..=0x6003 => {}
-            0x6004..=0x7FFF => {
-                print!("{}", val as char);
-            }
             0x4020..=0xFFFF => self.cartridge.borrow_mut().write(addr, val),
         }
     }
@@ -435,13 +432,13 @@ impl CPU {
     // byte, where the 6502 architecture usually prefers a structure of arrays. For example, TXA
     // AXS #$FC could step to the next OAM entry or to the next APU channel, saving one byte and
     // four cycles over four INXs. Also called SBX.
-    fn axs(&mut self, am: AddressingMode) -> u8 {
+    fn axs(&mut self, _: AddressingMode) -> u8 {
         unimplemented!();
 
-        match am {
-            AddressingMode::Immediate => 2,
-            _ => unreachable!(),
-        }
+        // match am {
+        //     AddressingMode::Immediate => 2,
+        //     _ => unreachable!(),
+        // }
     }
 }
 

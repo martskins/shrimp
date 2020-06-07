@@ -16,6 +16,7 @@ impl Cartridge {
         self.mapper.writeb(addr, val)
     }
 
+    #[allow(unused)]
     pub(crate) fn from_data(data: Vec<u8>) -> Cartridge {
         let mapper = mapper::from(data);
         Cartridge { mapper }

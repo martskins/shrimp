@@ -47,7 +47,13 @@ impl super::Mapper for Mapper {
         }
     }
 
-    fn writeb(&mut self, _: u16, _: u8) {
-        unreachable!("cannot write to NROM")
+    fn writeb(&mut self, addr: u16, val: u8) {
+        match addr {
+            0x6000..=0x6003 => {}
+            0x6004..=0x7FFF => {
+                print!("{}", val as char);
+            }
+            _ => unreachable!("cannot write to NROM"),
+        }
     }
 }

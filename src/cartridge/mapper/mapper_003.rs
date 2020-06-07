@@ -1,5 +1,6 @@
 use super::Header;
 
+#[allow(unused)]
 pub struct Mapper {
     header: Header,
     prg_rom_size: usize,
@@ -28,7 +29,8 @@ impl super::Mapper for Mapper {
             0x4020..=0x5FFF => {
                 print!("{}", val as char);
             }
-            0x6000..=0x7FFF => {
+            0x6000..=0x6003 => {}
+            0x6004..=0x7FFF => {
                 print!("{}", val as char);
             }
             0x8000..=0xFFFF => self.selected_bank = (addr & 0x03) as usize,
@@ -43,7 +45,6 @@ impl super::Mapper for Mapper {
                 self.chr_rom[bank_offset + addr as usize]
             }
             0x4020..=0x5FFF => 0,
-            0x6000..=0x7FFF => 0,
             0x8000..=0xFFFF => {
                 let addr = addr as usize - 0x8000;
                 self.prg_rom[addr % self.prg_rom_size]
