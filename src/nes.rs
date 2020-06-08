@@ -93,7 +93,7 @@ impl NES {
                 }
 
                 // 60 FPS
-                std::thread::sleep(std::time::Duration::from_nanos(16000000));
+                // std::thread::sleep(std::time::Duration::from_nanos(16000000));
             }
         }
 

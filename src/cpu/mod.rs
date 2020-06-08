@@ -315,7 +315,7 @@ impl CPU {
     }
 
     fn readw_zp(&mut self, addr: u8) -> u16 {
-        // TODO : this warpping_add may be incorrect
+        // TODO : this wrapping_add may be incorrect
         self.readb(addr as u16) as u16 | (self.readb((addr.wrapping_add(1)) as u16) as u16) << 8
         // self.readb(addr as u16) as u16 | (self.readb((addr + 1) as u16) as u16) << 8
     }
@@ -353,8 +353,6 @@ impl CPU {
             let val = self.readb(addr);
             self.writeb(0x2004, val);
 
-            // FIXME: The last address sometimes takes 1 cycle, sometimes 2 -- NESdev isn't very
-            // clear on this.
             self.cycles += 2;
         }
     }

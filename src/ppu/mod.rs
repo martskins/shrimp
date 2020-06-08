@@ -52,6 +52,7 @@ enum Flip {
 struct SpritePixel {
     color: RGB,
     priority: SpritePriority,
+    sprite_zero: bool,
 }
 
 struct Sprite {
@@ -181,40 +182,24 @@ impl PPU {
         self.ppuctrl & 0x80 != 0
     }
 
-    // walks through the nametable to get the correct sprite index, then fetches that sprite from
-    // the chr_rom and pushes the corresponding line of pixels into the screen.
-    fn render_scanline(&mut self) {
-        let visible_sprites = self.get_visible_sprites(self.scanline);
-        for x in 0..SCREEN_WIDTH {
-            debug_assert!((x as u8) as usize == x);
+    fn set_sprite_zero_hit(&mut self) {
+        self.ppustatus |= 0x40;
+    }
 
-            // TODO: ideally, we would be better off getting the byte for each tile line and
-            // passing it to get_pixel, in order to save 7 reads per tile line.
-            let bg_pixel = self.get_background_pixel(x as u8, self.scanline);
-            let fg_pixel = self.get_sprite_pixel(&visible_sprites, x as u8, self.scanline);
-            let pixel = match (bg_pixel, fg_pixel) {
-                (None, None) => continue,
-                (None, Some(fg)) => fg.color,
-                (Some(bg), None) => bg,
-                (
-                    Some(bg),
-                    Some(SpritePixel {
-                        priority: SpritePriority::Back,
-                        ..
-                    }),
-                ) => bg,
-                (
-                    Some(_),
-                    Some(SpritePixel {
-                        color,
-                        priority: SpritePriority::Front,
-                    }),
-                ) => color,
-            };
+    fn render_background(&self) -> bool {
+        self.ppumask & 0x08 > 0
+    }
 
-            let scanline = self.scanline as usize;
-            self.set_pixel(x as usize, scanline, pixel);
-        }
+    fn render_background_leftmost(&self) -> bool {
+        self.ppumask & 0x02 > 0
+    }
+
+    fn render_sprites(&self) -> bool {
+        self.ppumask & 0x10 > 0
+    }
+
+    fn render_sprites_leftmost(&self) -> bool {
+        self.ppumask & 0x04 > 0
     }
 
     fn foreground_offset(&self) -> u16 {
@@ -233,11 +218,85 @@ impl PPU {
         }
     }
 
-    fn get_visible_sprites(&mut self, y: u16) -> Vec<Sprite> {
+    fn set_sprite_overflow(&mut self, val: bool) {
+        if val {
+            self.ppustatus |= 0x40;
+        } else {
+            self.ppustatus &= !0x40;
+        }
+    }
+
+    // walks through the nametable to get the correct sprite index, then fetches that sprite from
+    // the chr_rom and pushes the corresponding line of pixels into the screen.
+    fn render_scanline(&mut self) {
+        // pre-fetch both sprite and background tile data for this scanline.
+        let visible_sprites = self.get_scanline_sprite_pixels();
+        let scanline_tiles = self.get_scanline_background_pixels();
+
+        for x in 0..SCREEN_WIDTH {
+            let bg_pixel = self.get_background_pixel(&scanline_tiles, x as u8);
+            let fg_pixel = self.get_sprite_pixel(&visible_sprites, x as u8, self.scanline);
+            if let Some(ref fg_pixel) = fg_pixel {
+                if fg_pixel.sprite_zero {
+                    self.set_sprite_zero_hit();
+                }
+            }
+
+            let pixel = match (bg_pixel, fg_pixel) {
+                (None, None) => continue,
+                (None, Some(fg)) => fg.color,
+                (Some(bg), None) => bg,
+                (
+                    Some(bg),
+                    Some(SpritePixel {
+                        priority: SpritePriority::Back,
+                        ..
+                    }),
+                ) => bg,
+                (
+                    Some(_),
+                    Some(SpritePixel {
+                        color,
+                        priority: SpritePriority::Front,
+                        ..
+                    }),
+                ) => color,
+            };
+
+            let scanline = self.scanline as usize;
+            self.set_pixel(x as usize, scanline, pixel);
+        }
+    }
+
+    // returns an array of 64 bytes, each representing a row of a background tile that is visible
+    // on the current scanline.
+    fn get_scanline_background_pixels(&mut self) -> [u8; 64] {
+        let mut out = [0; 64];
+
+        for i in 0..32 {
+            // each sprite is 8 pixels wide, so the chr index in the scanline is the position of
+            // the pixel in the scanline divided by 8.
+            let chr_idx = i as u16 % 32 + ((self.scanline as u16 / 8) % 32) * 32;
+            // read the chr_address from the nametable
+            let chr_address = 16 * self.readb(NTBL_BASE + chr_idx) as u16;
+            let chr_address = chr_address + self.scanline % 8;
+            let chr_address = chr_address + self.background_offset();
+
+            // load the two planes of the current tile's line
+            let cartridge = self.cartridge.borrow();
+            out[2 * i] = cartridge.read(chr_address);
+            out[(2 * i) + 1] = cartridge.read(chr_address + 8);
+        }
+
+        out
+    }
+
+    fn get_scanline_sprite_pixels(&mut self) -> Vec<Sprite> {
         let mut out = vec![];
         for i in 0..64 {
             let i = i * 4;
             let sprite_y = self.oam[i].wrapping_add(1);
+            let y = self.scanline;
             if y < sprite_y as u16 + 8 && y >= sprite_y as u16 {
                 let sprite = Sprite {
                     // sprite data is delayed by one scanline, so we must add 1 to the y position
@@ -260,15 +319,11 @@ impl PPU {
         out
     }
 
-    fn set_sprite_overflow(&mut self, val: bool) {
-        if val {
-            self.ppustatus |= 0x40;
-        } else {
-            self.ppustatus &= !0x40;
-        }
-    }
-
     fn get_sprite_pixel(&self, visible_sprites: &[Sprite], x: u8, y: u16) -> Option<SpritePixel> {
+        if !self.render_sprites() || (!self.render_sprites_leftmost() && x < 8) {
+            return None;
+        }
+
         let cartridge = self.cartridge.borrow();
         for sprite in visible_sprites {
             if x >= sprite.x && x < sprite.x.wrapping_add(8) {
@@ -309,6 +364,7 @@ impl PPU {
                         b: PALETTE[color_addr * 3 + 2],
                     },
                     priority: sprite.priority(),
+                    sprite_zero: chr_address < 0x03,
                 });
             } else {
                 continue;
@@ -318,22 +374,16 @@ impl PPU {
         None
     }
 
-    // get_background_pixel takes the position of a pixel and computes it's color.
-    fn get_background_pixel(&self, x: u8, y: u16) -> Option<RGB> {
-        // each sprite is 8 pixels wide, so the chr index in the scanline is the position of
-        // the pixel in the scanline divided by 8.
-        let chr_idx = (x as u16 / 8) % 32 + ((y / 8) % 32) * 32;
-        debug_assert!(chr_idx < 0x2000);
-        debug_assert!(x / 8 <= 0x32);
-        // read the chr_address from the nametable
-        let chr_address = 16 * self.readb(NTBL_BASE + chr_idx) as u16;
-        let chr_address = chr_address + y % 8;
-        let chr_address = chr_address + self.background_offset();
+    // takes a &[u8; 64], representing the pixels for the current scanline, and returns the pixel
+    // color that should be display at position (x, scanline).
+    fn get_background_pixel(&self, tiles: &[u8; 64], x: u8) -> Option<RGB> {
+        if !self.render_background() || (!self.render_background_leftmost() && x < 8) {
+            return None;
+        }
 
-        // load the two planes of the current tile's line
-        let cartridge = self.cartridge.borrow();
-        let chr_left = cartridge.read(chr_address);
-        let chr_right = cartridge.read(chr_address + 8);
+        let index = (x as usize / 8) * 2;
+        let chr_left = tiles[index];
+        let chr_right = tiles[index + 1];
 
         let bit = 7 - (x % 8);
         let (lsb, msb) = ((chr_left >> bit) & 0x01, (chr_right >> bit) & 0x01);
@@ -394,7 +444,6 @@ impl PPU {
         }
     }
 
-    #[inline(always)]
     fn readb(&self, addr: u16) -> u8 {
         let addr = PPU::map_addr(addr) as usize;
         match addr {
