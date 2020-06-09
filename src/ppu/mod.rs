@@ -231,10 +231,6 @@ impl PPU {
         }
     }
 
-    pub fn set_oam(&mut self, data: &[u8; 256]) {
-        self.oam = *data;
-    }
-
     // walks through the nametable to get the correct sprite index, then fetches that sprite from
     // the chr_rom and pushes the corresponding line of pixels into the screen.
     fn render_scanline(&mut self) {

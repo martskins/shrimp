@@ -325,21 +325,10 @@ impl CPU {
     }
 
     fn writeb(&mut self, addr: u16, val: u8) {
-        if addr == 0x4014 {
-            return self.dma(val);
-        }
-
         match addr {
             0x0000..=0x1FFF => self.ram[addr as usize % 0x0800] = val,
             0x2000..=0x3FFF => self.ppu.borrow_mut().write(addr % 0x08, val),
-            0x4014 => {
-                let page = (val as u16) << 8;
-                let mut data = [0; 256];
-                for (idx, val) in data.iter_mut().enumerate() {
-                    *val = self.readb(page | idx as u16);
-                }
-                self.ppu.borrow_mut().set_oam(&data);
-            }
+            0x4014 => self.dma(val),
             // ignore this range until sound is implemented.
             0x4000..=0x4015 => self.apu[addr as usize % 0x0018] = val,
             0x4016..=0x4017 => {
@@ -356,13 +345,11 @@ impl CPU {
         self.reg.set_flag(Flag::N, res & 0x80 == 0x80);
     }
 
-    fn dma(&mut self, hi_addr: u8) {
-        let start = (hi_addr as u16) << 8;
-
-        for addr in start..start + 256 {
-            let val = self.readb(addr);
+    fn dma(&mut self, hi: u8) {
+        let page = (hi as u16) << 8;
+        for idx in page..page + 256 {
+            let val = self.readb(page | idx as u16);
             self.writeb(0x2004, val);
-
             self.cycles += 2;
         }
     }
