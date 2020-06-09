@@ -315,9 +315,7 @@ impl CPU {
     }
 
     fn readw_zp(&mut self, addr: u8) -> u16 {
-        // TODO : this wrapping_add may be incorrect
         self.readb(addr as u16) as u16 | (self.readb((addr.wrapping_add(1)) as u16) as u16) << 8
-        // self.readb(addr as u16) as u16 | (self.readb((addr + 1) as u16) as u16) << 8
     }
 
     fn readw(&mut self, addr: u16) -> u16 {
@@ -326,7 +324,7 @@ impl CPU {
         (hi << 8) | lo
     }
 
-    pub fn writeb(&mut self, addr: u16, val: u8) {
+    fn writeb(&mut self, addr: u16, val: u8) {
         if addr == 0x4014 {
             return self.dma(val);
         }
@@ -334,6 +332,15 @@ impl CPU {
         match addr {
             0x0000..=0x1FFF => self.ram[addr as usize % 0x0800] = val,
             0x2000..=0x3FFF => self.ppu.borrow_mut().write(addr % 0x08, val),
+            0x4014 => {
+                let page = (val as u16) << 8;
+                let mut data = [0; 256];
+                for (idx, val) in data.iter_mut().enumerate() {
+                    *val = self.readb(page | idx as u16);
+                }
+                self.ppu.borrow_mut().set_oam(&data);
+            }
+            // ignore this range until sound is implemented.
             0x4000..=0x4015 => self.apu[addr as usize % 0x0018] = val,
             0x4016..=0x4017 => self.joypad_1.reset(),
             0x4018..=0x401F => {}

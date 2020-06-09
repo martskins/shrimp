@@ -23,8 +23,6 @@ pub enum Register {
     PPUSCROLL, // 0x2005
     PPUADDR,   // 0x2006
     PPUDATA,   // 0x2007
-    #[allow(unused)]
-    OAMDMA, // 0x2008
 }
 
 impl From<usize> for Register {
@@ -40,8 +38,6 @@ impl From<usize> for Register {
             5 => Register::PPUSCROLL,
             6 => Register::PPUADDR,
             7 => Register::PPUDATA,
-            // TODO: chech whether this is needed
-            // 8 => Reg::OAMDMA,
             _ => panic!("not a valid PPU reg"),
         }
     }

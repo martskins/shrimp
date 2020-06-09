@@ -25,7 +25,6 @@ static PALETTE: [u8; 192] = [
     184, 248, 216, 0, 252, 252, 248, 216, 248, 0, 0, 0, 0, 0, 0,
 ];
 
-const NTBL_BASE: u16 = 0x2000;
 const SPRITE_PALETTE_OFFSET: usize = 16;
 const PALETTE_BASE: usize = 0x3F00;
 
@@ -92,7 +91,6 @@ pub struct PPU {
     oamaddr: u8,
     ppuscroll: u16,
     ppuaddr: u16,
-    oamdma: u8,
     cycles: u64,
     has_blanked: bool,
     // nametables is an array with 4 individual nametables, each one of them contains a value that
@@ -121,7 +119,7 @@ pub struct PPU {
 }
 
 impl PPU {
-    pub fn new(cartridge: Rc<RefCell<Cartridge>>) -> PPU {
+    pub fn new(cartridge: Rc<RefCell<Cartridge>>) -> Self {
         PPU {
             ppuctrl: 0x10,
             ppumask: 0,
@@ -129,7 +127,6 @@ impl PPU {
             oamaddr: 0x01,
             ppuscroll: 0,
             ppuaddr: 0x0001,
-            oamdma: 0,
             address_latch: AddressLatch::HI,
             scanline: 0,
             frame_complete: false,
@@ -145,9 +142,7 @@ impl PPU {
             ppudata_buffer: 0,
         }
     }
-}
 
-impl PPU {
     pub fn tick(&mut self, cpu: &mut CPU) {
         self.frame_complete = false;
 
@@ -226,6 +221,20 @@ impl PPU {
         }
     }
 
+    fn base_nametable(&self) -> u16 {
+        match self.ppuctrl & 0x03 {
+            0x00 => 0x2000,
+            0x01 => 0x2400,
+            0x02 => 0x2800,
+            0x03 => 0x2C00,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn set_oam(&mut self, data: &[u8; 256]) {
+        self.oam = *data;
+    }
+
     // walks through the nametable to get the correct sprite index, then fetches that sprite from
     // the chr_rom and pushes the corresponding line of pixels into the screen.
     fn render_scanline(&mut self) {
@@ -235,7 +244,7 @@ impl PPU {
 
         for x in 0..SCREEN_WIDTH {
             let bg_pixel = self.get_background_pixel(&scanline_tiles, x as u8);
-            let fg_pixel = self.get_sprite_pixel(&visible_sprites, x as u8, self.scanline);
+            let fg_pixel = self.get_sprite_pixel(&visible_sprites, x as u8);
             if let Some(ref fg_pixel) = fg_pixel {
                 if fg_pixel.sprite_zero {
                     self.set_sprite_zero_hit();
@@ -278,7 +287,8 @@ impl PPU {
             // the pixel in the scanline divided by 8.
             let chr_idx = i as u16 % 32 + ((self.scanline as u16 / 8) % 32) * 32;
             // read the chr_address from the nametable
-            let chr_address = 16 * self.readb(NTBL_BASE + chr_idx) as u16;
+            let base = self.base_nametable();
+            let chr_address = 16 * self.readb(base + chr_idx) as u16;
             let chr_address = chr_address + self.scanline % 8;
             let chr_address = chr_address + self.background_offset();
 
@@ -319,11 +329,12 @@ impl PPU {
         out
     }
 
-    fn get_sprite_pixel(&self, visible_sprites: &[Sprite], x: u8, y: u16) -> Option<SpritePixel> {
+    fn get_sprite_pixel(&self, visible_sprites: &[Sprite], x: u8) -> Option<SpritePixel> {
         if !self.render_sprites() || (!self.render_sprites_leftmost() && x < 8) {
             return None;
         }
 
+        let y = self.scanline;
         let cartridge = self.cartridge.borrow();
         for sprite in visible_sprites {
             if x >= sprite.x && x < sprite.x.wrapping_add(8) {
@@ -412,7 +423,8 @@ impl PPU {
     fn get_attr_byte(&self, x: u8, y: u16) -> u8 {
         let x = x as u16 / 32;
         let y = y / 32;
-        self.readb(NTBL_BASE + 0x3C0 + x + (y * 8))
+        let base = self.base_nametable();
+        self.readb(base + 0x3C0 + x + (y * 8))
     }
 
     // pub fn get_vblank(&mut self) -> bool {
@@ -501,7 +513,6 @@ impl PPU {
                     val
                 }
             }
-            Register::OAMDMA => self.oamdma,
         }
     }
 
@@ -554,7 +565,6 @@ impl PPU {
                 self.writeb(self.ppuaddr, val);
                 self.incr_ppuaddr();
             }
-            Register::OAMDMA => self.oamdma = val,
         }
 
         match reg {
