@@ -93,7 +93,7 @@ impl NES {
                 }
 
                 // 60 FPS
-                // std::thread::sleep(std::time::Duration::from_nanos(16000000));
+                std::thread::sleep(std::time::Duration::from_nanos(16000000));
             }
         }
 
@@ -103,14 +103,24 @@ impl NES {
 
 fn set_keys(c: &mut Joypad, keycode: Keycode, pressed: bool) {
     match keycode {
-        Keycode::Return => c.start = pressed,
+        // Joypad 1
+        Keycode::R => c.start = pressed,
         Keycode::LShift => c.select = pressed,
-        Keycode::X => c.a = pressed,
-        Keycode::Z => c.b = pressed,
-        Keycode::Up => c.up = pressed,
-        Keycode::Down => c.down = pressed,
-        Keycode::Left => c.left = pressed,
-        Keycode::Right => c.right = pressed,
+        Keycode::V => c.a = pressed,
+        Keycode::C => c.b = pressed,
+        Keycode::W => c.up = pressed,
+        Keycode::S => c.down = pressed,
+        Keycode::A => c.left = pressed,
+        Keycode::D => c.right = pressed,
+        // Joypad 2
+        Keycode::U => c.start = pressed,
+        Keycode::RShift => c.select = pressed,
+        Keycode::N => c.a = pressed,
+        Keycode::B => c.b = pressed,
+        Keycode::I => c.up = pressed,
+        Keycode::K => c.down = pressed,
+        Keycode::J => c.left = pressed,
+        Keycode::L => c.right = pressed,
         _ => {}
     }
 }

@@ -7,6 +7,8 @@ const DOWN: u8 = 5;
 const LEFT: u8 = 6;
 const RIGHT: u8 = 7;
 
+// See https://wiki.nesdev.com/w/index.php/Standard_controller for more information on how the NES
+// joypad behaves.
 #[derive(Debug, Default)]
 pub struct Joypad {
     pub a: bool,
@@ -23,7 +25,9 @@ pub struct Joypad {
 
 impl Joypad {
     fn next(&mut self) {
-        self.strobe = (self.strobe + 1) % 8;
+        if self.strobe < 8 {
+            self.strobe += 1;
+        }
     }
 
     pub fn reset(&mut self) {
@@ -31,6 +35,14 @@ impl Joypad {
     }
 
     pub fn state(&mut self) -> bool {
+        // Each read reports one bit at a time through D0. The first 8 reads will indicate which
+        // buttons or directions are pressed (1 if pressed, 0 if not pressed). All subsequent reads
+        // will return 1 on official Nintendo brand controllers but may return 0 on third party
+        // controllers such as the U-Force.
+        if self.strobe == 8 {
+            return true;
+        }
+
         let val = match self.strobe {
             A => self.a,
             B => self.b,
