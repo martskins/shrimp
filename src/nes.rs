@@ -73,7 +73,8 @@ impl NES {
                 canvas.present();
 
                 while let Some(event) = event_pump.poll_event() {
-                    let c = &mut self.cpu.joypad_1;
+                    let j1 = &mut self.cpu.joypad_1;
+                    let j2 = &mut self.cpu.joypad_2;
                     match event {
                         Event::Quit { .. }
                         | Event::KeyDown {
@@ -83,11 +84,11 @@ impl NES {
                         Event::KeyUp {
                             keycode: Some(keycode),
                             ..
-                        } => set_keys(c, keycode, false),
+                        } => set_keys(j1, j2, keycode, false),
                         Event::KeyDown {
                             keycode: Some(keycode),
                             ..
-                        } => set_keys(c, keycode, true),
+                        } => set_keys(j1, j2, keycode, true),
                         _ => {}
                     }
                 }
@@ -101,26 +102,26 @@ impl NES {
     }
 }
 
-fn set_keys(c: &mut Joypad, keycode: Keycode, pressed: bool) {
+fn set_keys(j1: &mut Joypad, j2: &mut Joypad, keycode: Keycode, pressed: bool) {
     match keycode {
         // Joypad 1
-        Keycode::R => c.start = pressed,
-        Keycode::LShift => c.select = pressed,
-        Keycode::V => c.a = pressed,
-        Keycode::C => c.b = pressed,
-        Keycode::W => c.up = pressed,
-        Keycode::S => c.down = pressed,
-        Keycode::A => c.left = pressed,
-        Keycode::D => c.right = pressed,
+        Keycode::R => j1.start = pressed,
+        Keycode::LShift => j1.select = pressed,
+        Keycode::V => j1.a = pressed,
+        Keycode::C => j1.b = pressed,
+        Keycode::W => j1.up = pressed,
+        Keycode::S => j1.down = pressed,
+        Keycode::A => j1.left = pressed,
+        Keycode::D => j1.right = pressed,
         // Joypad 2
-        Keycode::U => c.start = pressed,
-        Keycode::RShift => c.select = pressed,
-        Keycode::N => c.a = pressed,
-        Keycode::B => c.b = pressed,
-        Keycode::I => c.up = pressed,
-        Keycode::K => c.down = pressed,
-        Keycode::J => c.left = pressed,
-        Keycode::L => c.right = pressed,
+        Keycode::U => j2.start = pressed,
+        Keycode::RShift => j2.select = pressed,
+        Keycode::N => j2.a = pressed,
+        Keycode::B => j2.b = pressed,
+        Keycode::I => j2.up = pressed,
+        Keycode::K => j2.down = pressed,
+        Keycode::J => j2.left = pressed,
+        Keycode::L => j2.right = pressed,
         _ => {}
     }
 }

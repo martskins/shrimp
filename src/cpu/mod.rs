@@ -342,7 +342,10 @@ impl CPU {
             }
             // ignore this range until sound is implemented.
             0x4000..=0x4015 => self.apu[addr as usize % 0x0018] = val,
-            0x4016..=0x4017 => self.joypad_1.reset(),
+            0x4016..=0x4017 => {
+                self.joypad_1.reset();
+                self.joypad_2.reset();
+            }
             0x4018..=0x401F => {}
             0x4020..=0xFFFF => self.cartridge.borrow_mut().write(addr, val),
         }
