@@ -3,7 +3,7 @@ version: 2
 jobs:
   clippy:
     docker:
-      - image: abronan/rust-circleci:latest
+      - image: circleci/rust:latest
     steps:
       - checkout
       - run: |
