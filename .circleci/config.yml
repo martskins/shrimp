@@ -9,6 +9,7 @@ jobs:
       - run: cargo clippy --all
       
 workflows:
-  lint:
+  version: 2
+  dev:
     jobs:
       - clippy
