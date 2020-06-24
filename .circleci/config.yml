@@ -1,9 +1,14 @@
 version: 2
 
 jobs:
-  lint:
+  clippy:
     docker:
       - image: abronan/rust-circleci:latest
     steps:
       - checkout
       - run: cargo clippy --all
+      
+workflows:
+  lint:
+    jobs:
+      - clippy
